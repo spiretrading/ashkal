@@ -1,4 +1,5 @@
 #include <cstdint>
+#include <iostream>
 #include <vector>
 #include "Version.hpp"
 
@@ -10,10 +11,14 @@ struct Color {
 };
 
 struct Point {
-  int x;
-  int y;
-  int z;
+  float x;
+  float y;
+  float z;
 };
+
+std::ostream& operator <<(std::ostream& out, Point point) {
+  return out << "Point(" << point.x << ' ' << point.y << ' ' << point.z << ')';
+}
 
 struct Voxel {
   Color color;
@@ -35,7 +40,8 @@ class Cube : public Model {
         m_color(color) {}
 
     Point end() const override {
-      return Point(m_size, m_size, m_size);
+      return Point(static_cast<float>(m_size), static_cast<float>(m_size),
+        static_cast<float>(m_size));
     }
 
     Voxel get(Point point) const override {
@@ -57,10 +63,40 @@ class Scene {
 };
 
 struct Vector {
-  int x;
-  int y;
-  int z;
+  float x;
+  float y;
+  float z;
 };
+
+std::ostream& operator <<(std::ostream& out, Vector vector) {
+  return out <<
+    "Vector(" << vector.x << ' ' << vector.y << ' ' << vector.z << ')';
+}
+
+Vector operator -(Vector left, Vector right) {
+  return Vector(left.x - right.x, left.y - right.y, left.z - right.z);
+}
+
+Vector operator +(Vector left, Vector right) {
+  return Vector(left.x + right.x, left.y + right.y, left.z + right.z);
+}
+
+Vector operator *(int left, Vector right) {
+  return Vector(left * right.x, left * right.y, left * right.z);
+}
+
+Vector operator *(float left, Vector right) {
+  return Vector(left * right.x, left * right.y, left * right.z);
+}
+
+Point operator +(Point left, Vector right) {
+  return Point(left.x + right.x, left.y + right.y, left.z + right.z);
+}
+
+Vector cross(Vector left, Vector right) {
+  return Vector(left.y * right.z - left.z * right.y,
+    left.z * right.x - left.x * right.z, left.x * right.y - left.y * right.x);
+}
 
 class Camera {
   public:
@@ -70,6 +106,14 @@ class Camera {
 
     void set_position(Point position) {
       m_position = position;
+    }
+
+    Vector get_direction() const {
+      return m_direction;
+    }
+
+    void set_direction(Vector direction) {
+      m_direction = direction;
     }
 
     Vector get_orientation() const {
@@ -82,16 +126,25 @@ class Camera {
 
   private:
     Point m_position;
+    Vector m_direction;
     Vector m_orientation;
 };
 
 std::vector<Color> render(
     const Scene& scene, int width, int height, const Camera& camera) {
-  auto distance = height / 2;
-  auto aspect_ratio = static_cast<double>(width) / height;
-  for(auto y = 0; y < height; ++y) {
-    for(auto x = 0; x < width; ++x) {
-//      auto pixel_point = Point(x, y, 0);
+  auto aspect_ratio = static_cast<float>(width) / height;
+  auto roll = cross(camera.get_orientation(), camera.get_direction());
+  auto top_left_direction =
+    camera.get_direction() - roll + aspect_ratio * camera.get_orientation();
+  auto x_shift = (2.f / width) * roll;
+  auto y_shift = (2 * aspect_ratio / height) * camera.get_orientation();
+  for(auto x = 0; x < width; ++x) {
+    for(auto y = 0; y < height; ++y) {
+      auto direction = top_left_direction + x * x_shift - y * y_shift;
+      auto point = camera.get_position() + direction;
+      if(x == 0) {
+        std::cout << x << " " << y << ": " << point << std::endl;
+      }
     }
   }
   return {};
@@ -103,7 +156,8 @@ int main(int argc, const char** argv) {
   scene.add(cube);
   auto camera = Camera();
   camera.set_position(Point(-50, -50, -50));
+  camera.set_direction(Vector(0, 0, 1));
   camera.set_orientation(Vector(0, 1, 0));
-  auto pixels = render(scene, 1000, 1000, camera);
+  auto pixels = render(scene, 100, 100, camera);
   return 0;
 }
