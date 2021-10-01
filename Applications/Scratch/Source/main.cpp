@@ -106,6 +106,11 @@ struct Point {
   friend auto operator <=>(const Point&, const Point&) = default;
 };
 
+Point floor(Point point) {
+  return Point(
+    std::floor(point.m_x), std::floor(point.m_y), std::floor(point.m_z));
+}
+
 std::ostream& operator <<(std::ostream& out, Point point) {
   return out <<
     "Point(" << point.m_x << ' ' << point.m_y << ' ' << point.m_z << ')';
@@ -275,7 +280,7 @@ std::vector<Color> render(
     for(auto x = 0; x < width; ++x) {
       auto direction = top_left_direction + x * x_shift - y * y_shift;
       auto point = camera.get_position() + direction;
-      auto increment = direction / magnitude(direction);
+      auto increment = (direction / magnitude(direction)) / 10;
       auto i = 0;
       while(true) {
         auto voxel = scene.get(point);
@@ -284,7 +289,14 @@ std::vector<Color> render(
           break;
         }
         ++i;
-        point = point + increment;
+        auto last_point = floor(point);
+        while(floor(point) == last_point) {
+          point = point + increment;
+        }
+        if(point.m_z >= 100) {
+          pixels.push_back(Color(0, 0, 0));
+          break;
+        }
         if(i == 1000) {
           pixels.push_back(Color(0, 0, 0));
           break;
@@ -300,7 +312,7 @@ int main(int argc, const char** argv) {
   auto cube = std::make_shared<Cube>(100, Color(255, 0, 0, 0));
   scene.add(cube);
   auto camera = Camera();
-  camera.set_position(Point(0, 0, -300));
+  camera.set_position(Point(30, 0, -100));
   camera.set_direction(Vector(0, 0, 1));
   camera.set_orientation(Vector(0, 1, 0));
   auto pixels = render(scene, 1920, 1080, camera);
