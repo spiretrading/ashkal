@@ -1,3 +1,4 @@
+#include <array>
 #include <cstdint>
 #include <iostream>
 #include <vector>
@@ -126,57 +127,6 @@ struct Voxel {
   friend auto operator <=>(const Voxel&, const Voxel&) = default;
 };
 
-class Model {
-  public:
-    virtual ~Model() = default;
-
-    virtual Point end() const = 0;
-
-    virtual Voxel get(Point point) const = 0;
-};
-
-class Cube : public Model {
-  public:
-    Cube(int size, Color color)
-      : m_size(size),
-        m_color(color) {}
-
-    Point end() const override {
-      return Point(static_cast<float>(m_size), static_cast<float>(m_size),
-        static_cast<float>(m_size));
-    }
-
-    Voxel get(Point point) const override {
-      if(point.m_x >= 0 && point.m_y >= 0 && point.m_z >= 0 &&
-          point.m_x < 10 && point.m_y < 10 && point.m_z < m_size) {
-        return Voxel(Color(0, 0, 255, 0));
-      }
-      if(point.m_x >= 0 && point.m_y >= 0 && point.m_z >= 0 &&
-          point.m_x < m_size && point.m_y < m_size && point.m_z < m_size) {
-        return Voxel(m_color);
-      }
-      return Voxel::NONE();
-    }
-
-  private:
-    int m_size;
-    Color m_color;
-};
-
-class Scene {
-  public:
-    Voxel get(Point point) const {
-      return m_models.front()->get(point);
-    }
-
-    void add(std::shared_ptr<Model> model) {
-      m_models.push_back(std::move(model));
-    }
-
-  private:
-    std::vector<std::shared_ptr<Model>> m_models;
-};
-
 struct Vector {
   float m_x;
   float m_y;
@@ -234,6 +184,223 @@ float magnitude(Vector vector) {
     vector.m_y * vector.m_y + vector.m_z * vector.m_z);
 }
 
+class Model {
+  public:
+    virtual ~Model() = default;
+
+    // Exclusive.
+    virtual Point end() const = 0;
+
+    virtual Voxel get(Point point) const = 0;
+};
+
+class Cube : public Model {
+  public:
+    Cube(int size, Color color)
+      : m_size(size),
+        m_color(color) {}
+
+    Point end() const override {
+      return Point(static_cast<float>(m_size), static_cast<float>(m_size),
+        static_cast<float>(m_size));
+    }
+
+    Voxel get(Point point) const override {
+      if(point.m_x >= 0 && point.m_y >= 0 && point.m_z >= 0 &&
+          point.m_x < 10 && point.m_y < 10 && point.m_z < m_size) {
+        return Voxel(Color(0, 0, 255, 0));
+      }
+      if(point.m_x >= 0 && point.m_y >= 0 && point.m_z >= 0 &&
+          point.m_x < m_size && point.m_y < m_size && point.m_z < m_size) {
+        return Voxel(m_color);
+      }
+      return Voxel::NONE();
+    }
+
+  private:
+    int m_size;
+    Color m_color;
+};
+
+
+class OctreeNode {
+  public:
+    virtual ~OctreeNode() = default;
+
+    Point get_start() const {
+      return m_start;
+    }
+
+    Point get_end() const {
+      return m_end;
+    }
+
+    virtual Voxel intersect(Point point, Vector direction) const = 0;
+
+    virtual void add(std::shared_ptr<Model> model) = 0;
+
+  protected:
+    OctreeNode(Point start, int size)
+      : m_start(start),
+        m_end(Point(start.m_x + size, start.m_y + size, start.m_z + size)) {}
+
+  private:
+    Point m_start;
+    Point m_end;
+};
+
+class OctreeLeaf : public OctreeNode {
+  public:
+    OctreeLeaf(Point start, int size)
+      : OctreeNode(start, size) {}
+
+    Voxel intersect(Point point, Vector direction) const override {
+      for(auto& model : m_models) {
+        auto voxel = model->get(point);
+        if(voxel != Voxel::NONE()) {
+          return voxel;
+        }
+      }
+      return Voxel::NONE();
+    }
+
+    void add(std::shared_ptr<Model> model) override {
+      m_models.push_back(std::move(model));
+    }
+
+  private:
+    std::vector<std::shared_ptr<Model>> m_models;
+};
+
+class OctreeInternalNode : public OctreeNode {
+  public:
+    OctreeInternalNode(Point start, int size)
+        : OctreeNode(start, size) {
+      if(size >= 256) {
+        m_children[0] = std::make_unique<OctreeInternalNode>(start, size / 2);
+        m_children[1] = std::make_unique<OctreeInternalNode>(
+          Point(start.m_x, start.m_y, start.m_z + size / 2), size / 2);
+        m_children[2] = std::make_unique<OctreeInternalNode>(
+          Point(start.m_x, start.m_y + size / 2, start.m_z), size / 2);
+        m_children[3] = std::make_unique<OctreeInternalNode>(
+          Point(start.m_x, start.m_y + size / 2, start.m_z + size / 2),
+          size / 2);
+        m_children[4] = std::make_unique<OctreeInternalNode>(
+          Point(start.m_x + size / 2, start.m_y, start.m_z), size / 2);
+        m_children[5] = std::make_unique<OctreeInternalNode>(
+          Point(start.m_x + size / 2, start.m_y, start.m_z + size / 2),
+          size / 2);
+        m_children[6] = std::make_unique<OctreeInternalNode>(
+          Point(start.m_x + size / 2, start.m_y + size / 2, start.m_z),
+          size / 2);
+        m_children[7] = std::make_unique<OctreeInternalNode>(
+          Point(start.m_x + size / 2, start.m_y + size / 2,
+            start.m_z + size / 2), size / 2);
+      } else {
+        m_children[0] = std::make_unique<OctreeLeaf>(start, size / 2);
+        m_children[1] = std::make_unique<OctreeLeaf>(
+          Point(start.m_x, start.m_y, start.m_z + size / 2), size / 2);
+        m_children[2] = std::make_unique<OctreeLeaf>(
+          Point(start.m_x, start.m_y + size / 2, start.m_z), size / 2);
+        m_children[3] = std::make_unique<OctreeLeaf>(
+          Point(start.m_x, start.m_y + size / 2, start.m_z + size / 2),
+          size / 2);
+        m_children[4] = std::make_unique<OctreeLeaf>(
+          Point(start.m_x + size / 2, start.m_y, start.m_z), size / 2);
+        m_children[5] = std::make_unique<OctreeLeaf>(
+          Point(start.m_x + size / 2, start.m_y, start.m_z + size / 2),
+          size / 2);
+        m_children[6] = std::make_unique<OctreeLeaf>(
+          Point(start.m_x + size / 2, start.m_y + size / 2, start.m_z),
+          size / 2);
+        m_children[7] = std::make_unique<OctreeLeaf>(
+          Point(start.m_x + size / 2, start.m_y + size / 2,
+            start.m_z + size / 2), size / 2);
+      }
+    }
+
+    Voxel intersect(Point point, Vector direction) const {
+      return get_node(point).intersect(point, direction);
+    }
+
+    void add(std::shared_ptr<Model> model) {
+    }
+
+  private:
+    std::array<std::unique_ptr<OctreeNode>, 8> m_children;
+
+    const OctreeNode& get_node(Point point) const {
+      return *m_children[get_node_index(point)];
+    }
+
+    OctreeNode& get_node(Point point) {
+      return *m_children[get_node_index(point)];
+    }
+
+    int get_node_index(Point point) const {
+      auto size = get_end().m_x - get_start().m_x;
+      if(point.m_x <= get_start().m_x + size / 2) {
+        if(point.m_y <= get_start().m_y + size / 2) {
+          if(point.m_z <= get_start().m_z + size / 2) {
+            return 0;
+          }
+          return 1;
+        }
+        if(point.m_z <= get_start().m_z + size / 2) {
+          return 2;
+        }
+        return 3;
+      }
+      if(point.m_y <= get_start().m_y + size / 2) {
+        if(point.m_z <= get_start().m_z + size / 2) {
+          return 4;
+        }
+        return 5;
+      }
+      if(point.m_z <= get_start().m_z + size / 2) {
+        return 6;
+      } else {
+        return 7;
+      }
+    }
+};
+
+class Scene {
+  public:
+    Voxel intersect(Point point, Vector direction) const {
+      auto increment = (direction / magnitude(direction)) / 10;
+      auto i = 0;
+      while(true) {
+        auto voxel = get(point);
+        if(voxel != Voxel::NONE()) {
+          return voxel;
+        }
+        ++i;
+        auto last_point = floor(point);
+        while(floor(point) == last_point) {
+          point = point + increment;
+        }
+        if(point.m_z >= 100) {
+          return Voxel::NONE();
+        }
+        if(i == 1000) {
+          return Voxel::NONE();
+        }
+      }
+    }
+
+    Voxel get(Point point) const {
+      return m_models.front()->get(point);
+    }
+
+    void add(std::shared_ptr<Model> model) {
+      m_models.push_back(std::move(model));
+    }
+
+  private:
+    std::vector<std::shared_ptr<Model>> m_models;
+};
+
 class Camera {
   public:
     Point get_position() const {
@@ -280,27 +447,11 @@ std::vector<Color> render(
     for(auto x = 0; x < width; ++x) {
       auto direction = top_left_direction + x * x_shift - y * y_shift;
       auto point = camera.get_position() + direction;
-      auto increment = (direction / magnitude(direction)) / 10;
-      auto i = 0;
-      while(true) {
-        auto voxel = scene.get(point);
-        if(voxel != Voxel::NONE()) {
-          pixels.push_back(voxel.m_color);
-          break;
-        }
-        ++i;
-        auto last_point = floor(point);
-        while(floor(point) == last_point) {
-          point = point + increment;
-        }
-        if(point.m_z >= 100) {
-          pixels.push_back(Color(0, 0, 0));
-          break;
-        }
-        if(i == 1000) {
-          pixels.push_back(Color(0, 0, 0));
-          break;
-        }
+      auto voxel = scene.intersect(point, direction);
+      if(voxel == Voxel::NONE()) {
+        pixels.push_back(Color(0, 0, 0));
+      } else {
+        pixels.push_back(voxel.m_color);
       }
     }
   }
