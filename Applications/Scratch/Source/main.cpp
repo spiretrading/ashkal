@@ -138,6 +138,15 @@ std::ostream& operator <<(std::ostream& out, Vector vector) {
     "Vector(" << vector.m_x << ' ' << vector.m_y << ' ' << vector.m_z << ')';
 }
 
+Vector operator -(Vector vector) {
+  return Vector(-vector.m_x, -vector.m_y, -vector.m_z);
+}
+
+Vector operator -(Point left, Point right) {
+  return Vector(
+    left.m_x - right.m_x, left.m_y - right.m_y, left.m_z - right.m_z);
+}
+
 Vector operator -(Vector left, Vector right) {
   return Vector(
     left.m_x - right.m_x, left.m_y - right.m_y, left.m_z - right.m_z);
@@ -169,6 +178,10 @@ Point operator +(Point left, Vector right) {
     left.m_x + right.m_x, left.m_y + right.m_y, left.m_z + right.m_z);
 }
 
+Point operator -(Point left, Vector right) {
+  return left + -right;
+}
+
 Vector cross(Vector left, Vector right) {
   return Vector(left.m_y * right.m_z - left.m_z * right.m_y,
     left.m_z * right.m_x - left.m_x * right.m_z,
@@ -176,12 +189,137 @@ Vector cross(Vector left, Vector right) {
 }
 
 float dot(Vector left, Vector right) {
-  return left.m_x * right.m_x + left.m_y + right.m_y + left.m_z + right.m_z;
+  return left.m_x * right.m_x + left.m_y * right.m_y + left.m_z * right.m_z;
 }
 
 float magnitude(Vector vector) {
   return std::sqrt(vector.m_x * vector.m_x +
     vector.m_y * vector.m_y + vector.m_z * vector.m_z);
+}
+
+bool contains(Point start, Point end, Point point) {
+  return point.m_x >= start.m_x && point.m_x < end.m_x &&
+    point.m_y >= start.m_y && point.m_y < end.m_y &&
+    point.m_z >= start.m_z && point.m_z < end.m_z;
+}
+
+struct Ray {
+  Point m_point;
+  Vector m_direction;
+};
+
+Point point_at(const Ray& ray, float t) {
+  return ray.m_point + t * ray.m_direction;
+}
+
+struct PlaneSegment {
+  Point m_point;
+  Vector m_normal;
+  int m_size;
+};
+
+bool contains(const PlaneSegment& plane, Point point) {
+  if(plane.m_normal.m_x == 1) {
+    return point.m_x >= plane.m_point.m_x &&
+      point.m_x < plane.m_point.m_x + 1 &&
+      point.m_y >= plane.m_point.m_y &&
+      point.m_y < plane.m_point.m_y + plane.m_size &&
+      point.m_z >= plane.m_point.m_z &&
+      point.m_z < plane.m_point.m_z + plane.m_size;
+  } else if(plane.m_normal.m_y == 1) {
+    return point.m_x >= plane.m_point.m_x &&
+      point.m_x < plane.m_point.m_x + plane.m_size &&
+      point.m_y >= plane.m_point.m_y &&
+      point.m_y < plane.m_point.m_y + 1 &&
+      point.m_z >= plane.m_point.m_z &&
+      point.m_z < plane.m_point.m_z + plane.m_size;
+  }
+  return point.m_x >= plane.m_point.m_x &&
+    point.m_x < plane.m_point.m_x + plane.m_size &&
+    point.m_y >= plane.m_point.m_y &&
+    point.m_y < plane.m_point.m_y + plane.m_size &&
+    point.m_z >= plane.m_point.m_z &&
+    point.m_z < plane.m_point.m_z + 1;
+}
+
+Vector flip(Vector normal) {
+  if(normal.m_x == 1) {
+    return Vector(0, 1, 0);
+  } else if(normal.m_y == 1) {
+    return Vector(0, 0, 1);
+  }
+  return Vector(1, 0, 0);
+}
+
+float intersect(const Ray& ray, const PlaneSegment& plane) {
+  auto d = dot(ray.m_direction, plane.m_normal);
+  auto n = dot(plane.m_point - ray.m_point, plane.m_normal);
+  if(d == 0) {
+    if(n != 0) {
+      return NAN;
+    }
+    auto n1 = flip(plane.m_normal);
+    auto p = PlaneSegment(plane.m_point - n1, n1, plane.m_size);
+    auto t = intersect(ray, p);
+    if(!std::isnan(t)) {
+      return t;
+    }
+    auto n2 = flip(n1);
+    p = PlaneSegment(plane.m_point - n2, n2, plane.m_size);
+    t = intersect(ray, p);
+    if(!std::isnan(t)) {
+      return t;
+    }
+    p = PlaneSegment(plane.m_point + plane.m_size * n1, n1, plane.m_size);
+    t = intersect(ray, p);
+    if(!std::isnan(t)) {
+      return t;
+    }
+    p = PlaneSegment(plane.m_point + plane.m_size * n2, n2, plane.m_size);
+    return intersect(ray, p);
+  }
+  auto t = n / d;
+  if(t >= 0 && contains(plane, point_at(ray, t))) {
+    return t;
+  }
+  return NAN;
+}
+
+Point compute_boundary(const Ray& ray, Point start, int size) {
+  auto plane = PlaneSegment(start, Vector(0, 0, 1), size);
+  auto t = intersect(ray, plane);
+  plane = PlaneSegment(start, Vector(0, 1, 0), size);
+  auto t2 = intersect(ray, plane);
+  if(std::isnan(t) || !std::isnan(t2) && t2 < t) {
+    t = t2;
+  }
+  plane = PlaneSegment(start, Vector(1, 0, 0), size);
+  t2 = intersect(ray, plane);
+  if(std::isnan(t) || !std::isnan(t2) && t2 < t) {
+    t = t2;
+  }
+  plane = PlaneSegment(start + size * Vector(0, 0, 1), Vector(0, 0, 1), size);
+  t2 = intersect(ray, plane);
+  if(std::isnan(t) || !std::isnan(t2) && t2 < t) {
+    t = t2;
+  }
+  plane = PlaneSegment(start + size * Vector(1, 0, 0), Vector(1, 0, 0), size);
+  t2 = intersect(ray, plane);
+  if(std::isnan(t) || !std::isnan(t2) && t2 < t) {
+    t = t2;
+  }
+  plane = PlaneSegment(start + size * Vector(0, 1, 0), Vector(0, 1, 0), size);
+  t2 = intersect(ray, plane);
+  if(std::isnan(t) || !std::isnan(t2) && t2 < t) {
+    t = t2;
+  }
+  return point_at(ray, t);
+}
+
+Point intersect_plane(
+    Point point, Vector direction, Point start, Vector normal) {
+  auto d = dot(start - point, normal) / dot(direction, normal);
+  return point + d * direction;
 }
 
 class Model {
@@ -222,7 +360,6 @@ class Cube : public Model {
     Color m_color;
 };
 
-
 class OctreeNode {
   public:
     virtual ~OctreeNode() = default;
@@ -235,7 +372,7 @@ class OctreeNode {
       return m_end;
     }
 
-    virtual Voxel intersect(Point point, Vector direction) const = 0;
+    virtual Voxel intersect(Point& point, Vector direction) const = 0;
 
     virtual void add(std::shared_ptr<Model> model) = 0;
 
@@ -254,11 +391,31 @@ class OctreeLeaf : public OctreeNode {
     OctreeLeaf(Point start, int size)
       : OctreeNode(start, size) {}
 
-    Voxel intersect(Point point, Vector direction) const override {
+    Voxel get(Point point) const {
       for(auto& model : m_models) {
         auto voxel = model->get(point);
         if(voxel != Voxel::NONE()) {
           return voxel;
+        }
+      }
+      return Voxel::NONE();
+    }
+
+    Voxel intersect(Point& point, Vector direction) const override {
+      if(m_models.empty()) {
+        point = compute_boundary(Ray(point, direction), get_start(),
+          static_cast<int>(get_end().m_x - get_start().m_x));
+        return Voxel::NONE();
+      }
+      auto increment = (direction / magnitude(direction)) / 10;
+      while(contains(get_start(), get_end(), point)) {
+        auto voxel = get(point);
+        if(voxel != Voxel::NONE()) {
+          return voxel;
+        }
+        auto last_point = floor(point);
+        while(floor(point) == last_point) {
+          point = point + increment;
         }
       }
       return Voxel::NONE();
@@ -307,23 +464,29 @@ class OctreeInternalNode : public OctreeNode {
           size / 2);
         m_children[4] = std::make_unique<OctreeLeaf>(
           Point(start.m_x + size / 2, start.m_y, start.m_z), size / 2);
-        m_children[5] = std::make_unique<OctreeLeaf>(
-          Point(start.m_x + size / 2, start.m_y, start.m_z + size / 2),
-          size / 2);
-        m_children[6] = std::make_unique<OctreeLeaf>(
-          Point(start.m_x + size / 2, start.m_y + size / 2, start.m_z),
-          size / 2);
-        m_children[7] = std::make_unique<OctreeLeaf>(
-          Point(start.m_x + size / 2, start.m_y + size / 2,
-            start.m_z + size / 2), size / 2);
+        m_children[5] = std::make_unique<OctreeLeaf>(Point(start.m_x + size / 2,
+          start.m_y, start.m_z + size / 2), size / 2);
+        m_children[6] = std::make_unique<OctreeLeaf>(Point(start.m_x + size / 2,
+          start.m_y + size / 2, start.m_z), size / 2);
+        m_children[7] = std::make_unique<OctreeLeaf>(Point(start.m_x + size / 2,
+          start.m_y + size / 2, start.m_z + size / 2), size / 2);
       }
     }
 
-    Voxel intersect(Point point, Vector direction) const {
-      return get_node(point).intersect(point, direction);
+    Voxel intersect(Point& point, Vector direction) const {
+      while(contains(get_start(), get_end(), point)) {
+        auto voxel = get_node(point).intersect(point, direction);
+        if(voxel != Voxel::NONE()) {
+          return voxel;
+        }
+      }
+      return Voxel::NONE();
     }
 
     void add(std::shared_ptr<Model> model) {
+      for(auto& child : m_children) {
+        child->add(model);
+      }
     }
 
   private:
@@ -367,38 +530,19 @@ class OctreeInternalNode : public OctreeNode {
 
 class Scene {
   public:
-    Voxel intersect(Point point, Vector direction) const {
-      auto increment = (direction / magnitude(direction)) / 10;
-      auto i = 0;
-      while(true) {
-        auto voxel = get(point);
-        if(voxel != Voxel::NONE()) {
-          return voxel;
-        }
-        ++i;
-        auto last_point = floor(point);
-        while(floor(point) == last_point) {
-          point = point + increment;
-        }
-        if(point.m_z >= 100) {
-          return Voxel::NONE();
-        }
-        if(i == 1000) {
-          return Voxel::NONE();
-        }
-      }
-    }
+    Scene()
+      : m_root(Point(-2048, -2048, -2048), 4096) {}
 
-    Voxel get(Point point) const {
-      return m_models.front()->get(point);
+    Voxel intersect(Point point, Vector direction) const {
+      return m_root.intersect(point, direction);
     }
 
     void add(std::shared_ptr<Model> model) {
-      m_models.push_back(std::move(model));
+      m_root.add(model);
     }
 
   private:
-    std::vector<std::shared_ptr<Model>> m_models;
+    OctreeInternalNode m_root;
 };
 
 class Camera {
@@ -458,7 +602,7 @@ std::vector<Color> render(
   return pixels;
 }
 
-int main(int argc, const char** argv) {
+void demo_scene() {
   auto scene = Scene();
   auto cube = std::make_shared<Cube>(100, Color(255, 0, 0, 0));
   scene.add(cube);
@@ -485,5 +629,13 @@ int main(int argc, const char** argv) {
     generateBitmapImage((unsigned char*) image, height, width, imageFileName);
     printf("Image generated!!");
 
+}
+
+int main(int argc, const char** argv) {
+//  demo_scene();
+  auto d = Vector(1, 1, 0);
+  auto ray = Ray(Point(50, 50, 50), d / magnitude(d));
+  auto p = compute_boundary(ray, Point(0, 0, 0), 100);
+  std::cout << p;
   return 0;
 }
