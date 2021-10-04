@@ -417,6 +417,8 @@ class OctreeLeaf : public OctreeNode {
       return Voxel::NONE();
     }
 
+    static inline auto intersections = 0;
+
     Voxel intersect(Point& point, Vector direction) const override {
       if(m_models.empty()) {
         point = compute_boundary(Ray(point, direction), get_start(),
@@ -424,6 +426,7 @@ class OctreeLeaf : public OctreeNode {
         return Voxel::NONE();
       }
       while(contains(get_start(), get_end(), point)) {
+        ++intersections;
         auto voxel = get(point);
         if(voxel != Voxel::NONE()) {
           return voxel;
@@ -446,7 +449,7 @@ class OctreeInternalNode : public OctreeNode {
     OctreeInternalNode(Point start, int size)
         : OctreeNode(start, size),
           m_is_empty(true) {
-      if(size >= 512) {
+      if(size >= 128) {
         m_children[0] = std::make_unique<OctreeInternalNode>(start, size / 2);
         m_children[1] = std::make_unique<OctreeInternalNode>(
           Point(start.m_x, start.m_y, start.m_z + size / 2), size / 2);
@@ -502,8 +505,17 @@ class OctreeInternalNode : public OctreeNode {
     }
 
     void add(std::shared_ptr<Model> model) {
-      m_is_empty = false;
-      get_node(Point(0, 0)).add(model);
+      if((0 <= get_start().m_x && model->end().m_x > get_start().m_x ||
+          0 < get_end().m_x && model->end().m_x > get_start().m_x) &&
+          (0 <= get_start().m_y && model->end().m_y > get_start().m_y ||
+          0 < get_end().m_y && model->end().m_y > get_start().m_y) &&
+          (0 <= get_start().m_z && model->end().m_z > get_start().m_z ||
+          0 < get_end().m_z && model->end().m_z > get_start().m_z)) {
+        m_is_empty = false;
+        for(auto& child : m_children) {
+          child->add(model);
+        }
+      }
     }
 
   private:
@@ -632,6 +644,7 @@ void demo_scene() {
   auto pixels = render(scene, 1920, 1080, camera);
   auto e = std::chrono::high_resolution_clock::now();
   std::cout << std::chrono::duration_cast<std::chrono::duration<double>>(e - s) << std::endl;
+  std::cout << OctreeLeaf::intersections << std::endl;
 
     constexpr int width = 1920;
     constexpr int height = 1080;
