@@ -1,4 +1,5 @@
 #include <array>
+#include <chrono>
 #include <cstdint>
 #include <iostream>
 #include <vector>
@@ -106,11 +107,6 @@ struct Point {
 
   friend auto operator <=>(const Point&, const Point&) = default;
 };
-
-Point floor(Point point) {
-  return Point(
-    std::floor(point.m_x), std::floor(point.m_y), std::floor(point.m_z));
-}
 
 std::ostream& operator <<(std::ostream& out, Point point) {
   return out <<
@@ -290,35 +286,48 @@ float intersect(const Ray& ray, const PlaneSegment& plane) {
 }
 
 Point compute_boundary(const Ray& ray, Point start, int size) {
-  auto plane = PlaneSegment(start - Vector(1, 1, 1), Vector(0, 0, 1), size + 2);
-  auto t = intersect(ray, plane);
-  plane = PlaneSegment(start - Vector(1, 1, 1), Vector(0, 1, 0), size + 2);
-  auto t2 = intersect(ray, plane);
-  if(std::isnan(t) || !std::isnan(t2) && t2 < t) {
-    t = t2;
+  auto x_distance = [&] {
+    if(ray.m_direction.m_x == 0) {
+      return INFINITY;
+    }
+    if(ray.m_direction.m_x > 0) {
+      return start.m_x + size + 1 - ray.m_point.m_x;
+    }
+    return start.m_x - 1 - ray.m_point.m_x;
+  }();
+  auto y_distance = [&] {
+    if(ray.m_direction.m_y == 0) {
+      return INFINITY;
+    }
+    if(ray.m_direction.m_y > 0) {
+      return start.m_y + size + 1 - ray.m_point.m_y;
+    }
+    return start.m_y - 1 - ray.m_point.m_y;
+  }();
+  auto z_distance = [&] {
+    if(ray.m_direction.m_z == 0) {
+      return INFINITY;
+    }
+    if(ray.m_direction.m_z > 0) {
+      return start.m_z + size + 1 - ray.m_point.m_z;
+    }
+    return start.m_z - 1 - ray.m_point.m_z;
+  }();
+  auto t = INFINITY;
+  if(x_distance != INFINITY) {
+    t = x_distance / ray.m_direction.m_x;
   }
-  plane = PlaneSegment(start - Vector(1, 1, 1), Vector(1, 0, 0), size + 2);
-  t2 = intersect(ray, plane);
-  if(std::isnan(t) || !std::isnan(t2) && t2 < t) {
-    t = t2;
+  if(y_distance != INFINITY) {
+    auto r = y_distance / ray.m_direction.m_y;
+    if(r < t) {
+      t = r;
+    }
   }
-  plane = PlaneSegment(start - Vector(1, 1, 1) + (size + 1) * Vector(0, 0, 1),
-    Vector(0, 0, 1), size + 2);
-  t2 = intersect(ray, plane);
-  if(std::isnan(t) || !std::isnan(t2) && t2 < t) {
-    t = t2;
-  }
-  plane = PlaneSegment(start - Vector(1, 1, 1) + (size + 1) * Vector(1, 0, 0),
-    Vector(1, 0, 0), size + 2);
-  t2 = intersect(ray, plane);
-  if(std::isnan(t) || !std::isnan(t2) && t2 < t) {
-    t = t2;
-  }
-  plane = PlaneSegment(start - Vector(1, 1, 1) + (size + 1) * Vector(0, 1, 0),
-    Vector(0, 1, 0), size + 2);
-  t2 = intersect(ray, plane);
-  if(std::isnan(t) || !std::isnan(t2) && t2 < t) {
-    t = t2;
+  if(z_distance != INFINITY) {
+    auto r = z_distance / ray.m_direction.m_z;
+    if(r < t) {
+      t = r;
+    }
   }
   return point_at(ray, t);
 }
@@ -435,7 +444,8 @@ class OctreeLeaf : public OctreeNode {
 class OctreeInternalNode : public OctreeNode {
   public:
     OctreeInternalNode(Point start, int size)
-        : OctreeNode(start, size) {
+        : OctreeNode(start, size),
+          m_is_empty(true) {
       if(size >= 512) {
         m_children[0] = std::make_unique<OctreeInternalNode>(start, size / 2);
         m_children[1] = std::make_unique<OctreeInternalNode>(
@@ -477,6 +487,11 @@ class OctreeInternalNode : public OctreeNode {
     }
 
     Voxel intersect(Point& point, Vector direction) const {
+      if(m_is_empty) {
+        point = compute_boundary(Ray(point, direction), get_start(),
+          static_cast<int>(get_end().m_x - get_start().m_x));
+        return Voxel::NONE();
+      }
       while(contains(get_start(), get_end(), point)) {
         auto voxel = get_node(point).intersect(point, direction);
         if(voxel != Voxel::NONE()) {
@@ -487,10 +502,12 @@ class OctreeInternalNode : public OctreeNode {
     }
 
     void add(std::shared_ptr<Model> model) {
+      m_is_empty = false;
       get_node(Point(0, 0)).add(model);
     }
 
   private:
+    bool m_is_empty;
     std::array<std::unique_ptr<OctreeNode>, 8> m_children;
 
     const OctreeNode& get_node(Point point) const {
@@ -606,12 +623,15 @@ std::vector<Color> render(
 void demo_scene() {
   auto scene = Scene();
   auto cube = std::make_shared<Cube>(100, Color(255, 0, 0, 0));
-//  scene.add(cube);
+  scene.add(cube);
   auto camera = Camera();
-  camera.set_position(Point(30, 0, -100));
-  camera.set_direction(Vector(0, 0, 1.2f));
+  camera.set_position(Point(30, 0, -1000));
+  camera.set_direction(Vector(0, 0, 1));
   camera.set_orientation(Vector(0, 1, 0));
+  auto s = std::chrono::high_resolution_clock::now();
   auto pixels = render(scene, 1920, 1080, camera);
+  auto e = std::chrono::high_resolution_clock::now();
+  std::cout << std::chrono::duration_cast<std::chrono::duration<double>>(e - s) << std::endl;
 
     constexpr int width = 1920;
     constexpr int height = 1080;
