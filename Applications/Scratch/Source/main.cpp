@@ -219,27 +219,28 @@ struct PlaneSegment {
 };
 
 bool contains(const PlaneSegment& plane, Point point) {
+  auto tolerance = 0.000001f;
   if(plane.m_normal.m_x == 1) {
-    return point.m_x >= plane.m_point.m_x &&
-      point.m_x < plane.m_point.m_x + 1 &&
-      point.m_y >= plane.m_point.m_y &&
-      point.m_y < plane.m_point.m_y + plane.m_size &&
-      point.m_z >= plane.m_point.m_z &&
-      point.m_z < plane.m_point.m_z + plane.m_size;
+    return point.m_x >= plane.m_point.m_x - tolerance &&
+      point.m_x < plane.m_point.m_x + 1 + tolerance &&
+      point.m_y >= plane.m_point.m_y - tolerance &&
+      point.m_y < plane.m_point.m_y + plane.m_size + tolerance &&
+      point.m_z >= plane.m_point.m_z - tolerance &&
+      point.m_z < plane.m_point.m_z + plane.m_size + tolerance;
   } else if(plane.m_normal.m_y == 1) {
-    return point.m_x >= plane.m_point.m_x &&
-      point.m_x < plane.m_point.m_x + plane.m_size &&
-      point.m_y >= plane.m_point.m_y &&
-      point.m_y < plane.m_point.m_y + 1 &&
-      point.m_z >= plane.m_point.m_z &&
-      point.m_z < plane.m_point.m_z + plane.m_size;
+    return point.m_x >= plane.m_point.m_x - tolerance &&
+      point.m_x < plane.m_point.m_x + plane.m_size + tolerance &&
+      point.m_y >= plane.m_point.m_y - tolerance &&
+      point.m_y < plane.m_point.m_y + 1 + tolerance &&
+      point.m_z >= plane.m_point.m_z - tolerance &&
+      point.m_z < plane.m_point.m_z + plane.m_size + tolerance;
   }
-  return point.m_x >= plane.m_point.m_x &&
-    point.m_x < plane.m_point.m_x + plane.m_size &&
-    point.m_y >= plane.m_point.m_y &&
-    point.m_y < plane.m_point.m_y + plane.m_size &&
-    point.m_z >= plane.m_point.m_z &&
-    point.m_z < plane.m_point.m_z + 1;
+  return point.m_x >= plane.m_point.m_x - tolerance &&
+    point.m_x < plane.m_point.m_x + plane.m_size + tolerance &&
+    point.m_y >= plane.m_point.m_y - tolerance &&
+    point.m_y < plane.m_point.m_y + plane.m_size + tolerance &&
+    point.m_z >= plane.m_point.m_z - tolerance &&
+    point.m_z < plane.m_point.m_z + 1 + tolerance;
 }
 
 Vector flip(Vector normal) {
@@ -278,6 +279,9 @@ float intersect(const Ray& ray, const PlaneSegment& plane) {
     p = PlaneSegment(plane.m_point + plane.m_size * n2, n2, plane.m_size);
     return intersect(ray, p);
   }
+  if(std::signbit(n) != std::signbit(d)) {
+    return NAN;
+  }
   auto t = n / d;
   if(t >= 0 && contains(plane, point_at(ray, t))) {
     return t;
@@ -286,29 +290,32 @@ float intersect(const Ray& ray, const PlaneSegment& plane) {
 }
 
 Point compute_boundary(const Ray& ray, Point start, int size) {
-  auto plane = PlaneSegment(start, Vector(0, 0, 1), size);
+  auto plane = PlaneSegment(start - Vector(1, 1, 1), Vector(0, 0, 1), size + 2);
   auto t = intersect(ray, plane);
-  plane = PlaneSegment(start, Vector(0, 1, 0), size);
+  plane = PlaneSegment(start - Vector(1, 1, 1), Vector(0, 1, 0), size + 2);
   auto t2 = intersect(ray, plane);
   if(std::isnan(t) || !std::isnan(t2) && t2 < t) {
     t = t2;
   }
-  plane = PlaneSegment(start, Vector(1, 0, 0), size);
+  plane = PlaneSegment(start - Vector(1, 1, 1), Vector(1, 0, 0), size + 2);
   t2 = intersect(ray, plane);
   if(std::isnan(t) || !std::isnan(t2) && t2 < t) {
     t = t2;
   }
-  plane = PlaneSegment(start + size * Vector(0, 0, 1), Vector(0, 0, 1), size);
+  plane = PlaneSegment(start - Vector(1, 1, 1) + (size + 1) * Vector(0, 0, 1),
+    Vector(0, 0, 1), size + 2);
   t2 = intersect(ray, plane);
   if(std::isnan(t) || !std::isnan(t2) && t2 < t) {
     t = t2;
   }
-  plane = PlaneSegment(start + size * Vector(1, 0, 0), Vector(1, 0, 0), size);
+  plane = PlaneSegment(start - Vector(1, 1, 1) + (size + 1) * Vector(1, 0, 0),
+    Vector(1, 0, 0), size + 2);
   t2 = intersect(ray, plane);
   if(std::isnan(t) || !std::isnan(t2) && t2 < t) {
     t = t2;
   }
-  plane = PlaneSegment(start + size * Vector(0, 1, 0), Vector(0, 1, 0), size);
+  plane = PlaneSegment(start - Vector(1, 1, 1) + (size + 1) * Vector(0, 1, 0),
+    Vector(0, 1, 0), size + 2);
   t2 = intersect(ray, plane);
   if(std::isnan(t) || !std::isnan(t2) && t2 < t) {
     t = t2;
@@ -407,16 +414,12 @@ class OctreeLeaf : public OctreeNode {
           static_cast<int>(get_end().m_x - get_start().m_x));
         return Voxel::NONE();
       }
-      auto increment = (direction / magnitude(direction)) / 10;
       while(contains(get_start(), get_end(), point)) {
         auto voxel = get(point);
         if(voxel != Voxel::NONE()) {
           return voxel;
         }
-        auto last_point = floor(point);
-        while(floor(point) == last_point) {
-          point = point + increment;
-        }
+        point = compute_boundary(Ray(point, direction), point, 1);
       }
       return Voxel::NONE();
     }
@@ -433,7 +436,7 @@ class OctreeInternalNode : public OctreeNode {
   public:
     OctreeInternalNode(Point start, int size)
         : OctreeNode(start, size) {
-      if(size >= 256) {
+      if(size >= 512) {
         m_children[0] = std::make_unique<OctreeInternalNode>(start, size / 2);
         m_children[1] = std::make_unique<OctreeInternalNode>(
           Point(start.m_x, start.m_y, start.m_z + size / 2), size / 2);
@@ -484,9 +487,7 @@ class OctreeInternalNode : public OctreeNode {
     }
 
     void add(std::shared_ptr<Model> model) {
-      for(auto& child : m_children) {
-        child->add(model);
-      }
+      get_node(Point(0, 0)).add(model);
     }
 
   private:
@@ -502,25 +503,25 @@ class OctreeInternalNode : public OctreeNode {
 
     int get_node_index(Point point) const {
       auto size = get_end().m_x - get_start().m_x;
-      if(point.m_x <= get_start().m_x + size / 2) {
-        if(point.m_y <= get_start().m_y + size / 2) {
-          if(point.m_z <= get_start().m_z + size / 2) {
+      if(point.m_x < get_start().m_x + size / 2) {
+        if(point.m_y < get_start().m_y + size / 2) {
+          if(point.m_z < get_start().m_z + size / 2) {
             return 0;
           }
           return 1;
         }
-        if(point.m_z <= get_start().m_z + size / 2) {
+        if(point.m_z < get_start().m_z + size / 2) {
           return 2;
         }
         return 3;
       }
-      if(point.m_y <= get_start().m_y + size / 2) {
-        if(point.m_z <= get_start().m_z + size / 2) {
+      if(point.m_y < get_start().m_y + size / 2) {
+        if(point.m_z < get_start().m_z + size / 2) {
           return 4;
         }
         return 5;
       }
-      if(point.m_z <= get_start().m_z + size / 2) {
+      if(point.m_z < get_start().m_z + size / 2) {
         return 6;
       } else {
         return 7;
@@ -560,7 +561,7 @@ class Camera {
     }
 
     void set_direction(Vector direction) {
-      m_direction = direction;
+      m_direction = direction / magnitude(direction);
     }
 
     Vector get_orientation() const {
@@ -605,10 +606,10 @@ std::vector<Color> render(
 void demo_scene() {
   auto scene = Scene();
   auto cube = std::make_shared<Cube>(100, Color(255, 0, 0, 0));
-  scene.add(cube);
+//  scene.add(cube);
   auto camera = Camera();
   camera.set_position(Point(30, 0, -100));
-  camera.set_direction(Vector(0, 0, 1));
+  camera.set_direction(Vector(0, 0, 1.2f));
   camera.set_orientation(Vector(0, 1, 0));
   auto pixels = render(scene, 1920, 1080, camera);
 
@@ -632,10 +633,12 @@ void demo_scene() {
 }
 
 int main(int argc, const char** argv) {
-//  demo_scene();
-  auto d = Vector(1, 1, 0);
-  auto ray = Ray(Point(50, 50, 50), d / magnitude(d));
-  auto p = compute_boundary(ray, Point(0, 0, 0), 100);
+  demo_scene();
+/*
+  auto d = Vector(2, 1, 1);
+  auto ray = Ray(Point(0, 0, 0), d / magnitude(d));
+  auto p = compute_boundary(ray, Point(0, 0, 0), 1);
   std::cout << p;
+*/
   return 0;
 }
