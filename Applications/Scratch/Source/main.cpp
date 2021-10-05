@@ -1,4 +1,3 @@
-#if 0
 #include <array>
 #include <chrono>
 #include <cstdint>
@@ -418,8 +417,6 @@ class OctreeLeaf : public OctreeNode {
       return Voxel::NONE();
     }
 
-    static inline auto intersections = 0;
-
     Voxel intersect(Point& point, Vector direction) const override {
       if(m_models.empty()) {
         point = compute_boundary(Ray(point, direction), get_start(),
@@ -427,7 +424,6 @@ class OctreeLeaf : public OctreeNode {
         return Voxel::NONE();
       }
       while(contains(get_start(), get_end(), point)) {
-        ++intersections;
         auto voxel = get(point);
         if(voxel != Voxel::NONE()) {
           return voxel;
@@ -645,7 +641,6 @@ void demo_scene() {
   auto pixels = render(scene, 1920, 1080, camera);
   auto e = std::chrono::high_resolution_clock::now();
   std::cout << std::chrono::duration_cast<std::chrono::duration<double>>(e - s) << std::endl;
-  std::cout << OctreeLeaf::intersections << std::endl;
 
     constexpr int width = 1920;
     constexpr int height = 1080;
@@ -675,46 +670,4 @@ int main(int argc, const char** argv) {
   std::cout << p;
 */
   return 0;
-}
-#endif
-
-#include <vector>
-#include <algorithm>
-#include <boost/compute.hpp>
-
-namespace compute = boost::compute;
-
-int main()
-{
-    // get the default compute device
-    compute::device gpu = compute::system::default_device();
-
-    // create a compute context and command queue
-    compute::context ctx(gpu);
-    compute::command_queue queue(ctx, gpu);
-
-    // generate random numbers on the host
-    std::vector<float> host_vector(1000000);
-    std::generate(host_vector.begin(), host_vector.end(),
-      [] { return static_cast<float>(rand()); });
-
-    // create vector on the device
-    compute::vector<float> device_vector(1000000, ctx);
-
-    // copy data to the device
-    compute::copy(
-        host_vector.begin(), host_vector.end(), device_vector.begin(), queue
-    );
-
-    // sort data on the device
-    compute::sort(
-        device_vector.begin(), device_vector.end(), queue
-    );
-
-    // copy data back to the host
-    compute::copy(
-        device_vector.begin(), device_vector.end(), host_vector.begin(), queue
-    );
-
-    return 0;
 }
