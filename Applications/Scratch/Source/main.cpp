@@ -2,9 +2,31 @@
 #include <chrono>
 #include <cstdint>
 #include <iostream>
-#include <vector>
 #include <stdio.h>
+#include <vector>
+#include <boost/compute.hpp>
 #include "Version.hpp"
+
+using namespace boost;
+
+struct Accelerator {
+  compute::device m_device;
+  compute::context m_context;
+  compute::command_queue m_queue;
+
+  Accelerator(compute::device device)
+    : m_device(std::move(device)),
+      m_context(compute::context(m_device)),
+      m_queue(compute::command_queue(m_context, m_device)) {}
+};
+
+template<typename F>
+void profile(F&& f) {
+  auto s = std::chrono::high_resolution_clock::now();
+  std::forward<F>(f)();
+  auto e = std::chrono::high_resolution_clock::now();
+  std::cout << std::chrono::duration_cast<std::chrono::duration<double>>(e - s) << std::endl;
+}
 
 namespace {
 const int BYTES_PER_PIXEL = 3; /// red, green, & blue
@@ -604,8 +626,36 @@ class Camera {
     Vector m_orientation;
 };
 
-std::vector<Color> render(
-    const Scene& scene, int width, int height, const Camera& camera) {
+void intersect(const compute::vector<float>& x, compute::vector<float>& y,
+    float a, Accelerator& accelerator) {
+  static auto kernel = [&] {
+    static auto source = std::string(R"SRC(
+      __kernel void saxpy(__global float* x, __global float* y, float a) {
+        int i = get_global_id(0);
+        y[i] += a * x[i];
+      })SRC");
+    auto cache =
+      compute::program_cache::get_global_cache(accelerator.m_context);
+    auto key = std::string("__iwocl16_saxpy");
+    auto program =
+      cache->get_or_build(key, {}, source, accelerator.m_context);
+    return program.create_kernel("saxpy");
+  }();
+  kernel.set_args(x.get_buffer(), y.get_buffer(), a);
+  auto event =
+    accelerator.m_queue.enqueue_1d_range_kernel(kernel, 0, y.size(), 0);
+  accelerator.m_queue.finish();
+}
+
+void cintersect(const std::vector<float>& x, std::vector<float>& y,
+    float a, Accelerator& accelerator) {
+  for(auto i = std::size_t(0); i != x.size(); ++i) {
+    y[i] += a * x[i];
+  }
+}
+
+std::vector<Color> render(const Scene& scene, Accelerator& accelerator,
+    int width, int height, const Camera& camera) {
   auto pixels = std::vector<Color>();
   pixels.reserve(width * height);
   auto aspect_ratio = static_cast<float>(height) / width;
@@ -614,6 +664,37 @@ std::vector<Color> render(
     camera.get_direction() - roll + aspect_ratio * camera.get_orientation();
   auto x_shift = (2.f / width) * roll;
   auto y_shift = (2 * aspect_ratio / height) * camera.get_orientation();
+  auto cx = std::vector<float>();
+  for(auto i = 0; i < 30000000; ++i) {
+    cx.push_back(1.0f);
+  }
+  auto cy = std::vector<float>();
+  for(auto i = std::size_t(0); i < cx.size(); ++i) {
+    cy.push_back(1.0f);
+  }
+  profile([&] {
+    cintersect(cx, cy, 3.0f, accelerator);
+  });
+  auto s = 0.f;
+  for(auto i : cy) {
+    s += i;
+  }
+  std::cout << s << std::endl;
+
+
+  auto x = compute::vector<float>(cx.size(), accelerator.m_context);
+  compute::copy(cx.begin(), cx.end(), x.begin(), accelerator.m_queue);
+  auto y = compute::vector<float>(cx.size(), accelerator.m_context);
+  compute::copy(cy.begin(), cy.end(), y.begin(), accelerator.m_queue);
+  intersect(x, y, 3.0f, accelerator);
+  profile([&] {
+    intersect(x, y, 3.0f, accelerator);
+  });
+  s = static_cast<float>(y[0]);
+  std::cout << s << std::endl;
+
+
+#if 0
   for(auto y = 0; y < height; ++y) {
     for(auto x = 0; x < width; ++x) {
       auto direction = top_left_direction + x * x_shift - y * y_shift;
@@ -626,10 +707,21 @@ std::vector<Color> render(
       }
     }
   }
+#endif
   return pixels;
 }
 
+compute::device load_gpu() {
+  for(auto& device : compute::system::devices()) {
+    if(device.type() == compute::device::type::gpu) {
+      return device;
+    }
+  }
+  throw compute::no_device_found();
+}
+
 void demo_scene() {
+  auto accelerator = Accelerator(load_gpu());
   auto scene = Scene();
   auto cube = std::make_shared<Cube>(100, Color(255, 0, 0, 0));
   scene.add(cube);
@@ -637,11 +729,9 @@ void demo_scene() {
   camera.set_position(Point(30, 0, -1000));
   camera.set_direction(Vector(0, 0, 1));
   camera.set_orientation(Vector(0, 1, 0));
-  auto s = std::chrono::high_resolution_clock::now();
-  auto pixels = render(scene, 1920, 1080, camera);
-  auto e = std::chrono::high_resolution_clock::now();
-  std::cout << std::chrono::duration_cast<std::chrono::duration<double>>(e - s) << std::endl;
+  auto pixels = render(scene, accelerator, 1920, 1080, camera);
 
+#if 0
     constexpr int width = 1920;
     constexpr int height = 1080;
     auto image = new unsigned char[height][width][BYTES_PER_PIXEL];
@@ -658,16 +748,10 @@ void demo_scene() {
 
     generateBitmapImage((unsigned char*) image, height, width, imageFileName);
     printf("Image generated!!");
-
+#endif
 }
 
 int main(int argc, const char** argv) {
   demo_scene();
-/*
-  auto d = Vector(2, 1, 1);
-  auto ray = Ray(Point(0, 0, 0), d / magnitude(d));
-  auto p = compute_boundary(ray, Point(0, 0, 0), 1);
-  std::cout << p;
-*/
   return 0;
 }
