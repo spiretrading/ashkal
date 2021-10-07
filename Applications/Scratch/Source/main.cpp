@@ -21,11 +21,12 @@ struct Accelerator {
 };
 
 template<typename F>
-void profile(F&& f) {
+auto profile(F&& f) {
   auto s = std::chrono::high_resolution_clock::now();
-  std::forward<F>(f)();
+  auto r = std::forward<F>(f)();
   auto e = std::chrono::high_resolution_clock::now();
   std::cout << std::chrono::duration_cast<std::chrono::duration<double>>(e - s) << std::endl;
+  return r;
 }
 
 namespace {
@@ -230,83 +231,6 @@ Point point_at(const Ray& ray, float t) {
   return ray.m_point + t * ray.m_direction;
 }
 
-struct PlaneSegment {
-  Point m_point;
-  Vector m_normal;
-  int m_size;
-};
-
-bool contains(const PlaneSegment& plane, Point point) {
-  auto tolerance = 0.000001f;
-  if(plane.m_normal.m_x == 1) {
-    return point.m_x >= plane.m_point.m_x - tolerance &&
-      point.m_x < plane.m_point.m_x + 1 + tolerance &&
-      point.m_y >= plane.m_point.m_y - tolerance &&
-      point.m_y < plane.m_point.m_y + plane.m_size + tolerance &&
-      point.m_z >= plane.m_point.m_z - tolerance &&
-      point.m_z < plane.m_point.m_z + plane.m_size + tolerance;
-  } else if(plane.m_normal.m_y == 1) {
-    return point.m_x >= plane.m_point.m_x - tolerance &&
-      point.m_x < plane.m_point.m_x + plane.m_size + tolerance &&
-      point.m_y >= plane.m_point.m_y - tolerance &&
-      point.m_y < plane.m_point.m_y + 1 + tolerance &&
-      point.m_z >= plane.m_point.m_z - tolerance &&
-      point.m_z < plane.m_point.m_z + plane.m_size + tolerance;
-  }
-  return point.m_x >= plane.m_point.m_x - tolerance &&
-    point.m_x < plane.m_point.m_x + plane.m_size + tolerance &&
-    point.m_y >= plane.m_point.m_y - tolerance &&
-    point.m_y < plane.m_point.m_y + plane.m_size + tolerance &&
-    point.m_z >= plane.m_point.m_z - tolerance &&
-    point.m_z < plane.m_point.m_z + 1 + tolerance;
-}
-
-Vector flip(Vector normal) {
-  if(normal.m_x == 1) {
-    return Vector(0, 1, 0);
-  } else if(normal.m_y == 1) {
-    return Vector(0, 0, 1);
-  }
-  return Vector(1, 0, 0);
-}
-
-float intersect(const Ray& ray, const PlaneSegment& plane) {
-  auto d = dot(ray.m_direction, plane.m_normal);
-  auto n = dot(plane.m_point - ray.m_point, plane.m_normal);
-  if(d == 0) {
-    if(n != 0) {
-      return NAN;
-    }
-    auto n1 = flip(plane.m_normal);
-    auto p = PlaneSegment(plane.m_point - n1, n1, plane.m_size);
-    auto t = intersect(ray, p);
-    if(!std::isnan(t)) {
-      return t;
-    }
-    auto n2 = flip(n1);
-    p = PlaneSegment(plane.m_point - n2, n2, plane.m_size);
-    t = intersect(ray, p);
-    if(!std::isnan(t)) {
-      return t;
-    }
-    p = PlaneSegment(plane.m_point + plane.m_size * n1, n1, plane.m_size);
-    t = intersect(ray, p);
-    if(!std::isnan(t)) {
-      return t;
-    }
-    p = PlaneSegment(plane.m_point + plane.m_size * n2, n2, plane.m_size);
-    return intersect(ray, p);
-  }
-  if(std::signbit(n) != std::signbit(d)) {
-    return NAN;
-  }
-  auto t = n / d;
-  if(t >= 0 && contains(plane, point_at(ray, t))) {
-    return t;
-  }
-  return NAN;
-}
-
 Point compute_boundary(const Ray& ray, Point start, int size) {
   auto x_distance = [&] {
     if(ray.m_direction.m_x == 0) {
@@ -352,12 +276,6 @@ Point compute_boundary(const Ray& ray, Point start, int size) {
     }
   }
   return point_at(ray, t);
-}
-
-Point intersect_plane(
-    Point point, Vector direction, Point start, Vector normal) {
-  auto d = dot(start - point, normal) / dot(direction, normal);
-  return point + d * direction;
 }
 
 class Model {
@@ -626,34 +544,6 @@ class Camera {
     Vector m_orientation;
 };
 
-void intersect(const compute::vector<float>& x, compute::vector<float>& y,
-    float a, Accelerator& accelerator) {
-  static auto kernel = [&] {
-    static auto source = std::string(R"SRC(
-      __kernel void saxpy(__global float* x, __global float* y, float a) {
-        int i = get_global_id(0);
-        y[i] += a * x[i];
-      })SRC");
-    auto cache =
-      compute::program_cache::get_global_cache(accelerator.m_context);
-    auto key = std::string("__iwocl16_saxpy");
-    auto program =
-      cache->get_or_build(key, {}, source, accelerator.m_context);
-    return program.create_kernel("saxpy");
-  }();
-  kernel.set_args(x.get_buffer(), y.get_buffer(), a);
-  auto event =
-    accelerator.m_queue.enqueue_1d_range_kernel(kernel, 0, y.size(), 0);
-  accelerator.m_queue.finish();
-}
-
-void cintersect(const std::vector<float>& x, std::vector<float>& y,
-    float a, Accelerator& accelerator) {
-  for(auto i = std::size_t(0); i != x.size(); ++i) {
-    y[i] += a * x[i];
-  }
-}
-
 std::vector<Color> render(const Scene& scene, Accelerator& accelerator,
     int width, int height, const Camera& camera) {
   auto pixels = std::vector<Color>();
@@ -664,37 +554,6 @@ std::vector<Color> render(const Scene& scene, Accelerator& accelerator,
     camera.get_direction() - roll + aspect_ratio * camera.get_orientation();
   auto x_shift = (2.f / width) * roll;
   auto y_shift = (2 * aspect_ratio / height) * camera.get_orientation();
-  auto cx = std::vector<float>();
-  for(auto i = 0; i < 30000000; ++i) {
-    cx.push_back(1.0f);
-  }
-  auto cy = std::vector<float>();
-  for(auto i = std::size_t(0); i < cx.size(); ++i) {
-    cy.push_back(1.0f);
-  }
-  profile([&] {
-    cintersect(cx, cy, 3.0f, accelerator);
-  });
-  auto s = 0.f;
-  for(auto i : cy) {
-    s += i;
-  }
-  std::cout << s << std::endl;
-
-
-  auto x = compute::vector<float>(cx.size(), accelerator.m_context);
-  compute::copy(cx.begin(), cx.end(), x.begin(), accelerator.m_queue);
-  auto y = compute::vector<float>(cx.size(), accelerator.m_context);
-  compute::copy(cy.begin(), cy.end(), y.begin(), accelerator.m_queue);
-  intersect(x, y, 3.0f, accelerator);
-  profile([&] {
-    intersect(x, y, 3.0f, accelerator);
-  });
-  s = static_cast<float>(y[0]);
-  std::cout << s << std::endl;
-
-
-#if 0
   for(auto y = 0; y < height; ++y) {
     for(auto x = 0; x < width; ++x) {
       auto direction = top_left_direction + x * x_shift - y * y_shift;
@@ -707,7 +566,6 @@ std::vector<Color> render(const Scene& scene, Accelerator& accelerator,
       }
     }
   }
-#endif
   return pixels;
 }
 
@@ -729,26 +587,24 @@ void demo_scene() {
   camera.set_position(Point(30, 0, -1000));
   camera.set_direction(Vector(0, 0, 1));
   camera.set_orientation(Vector(0, 1, 0));
-  auto pixels = render(scene, accelerator, 1920, 1080, camera);
+  auto pixels =
+    profile([&] { return render(scene, accelerator, 1920, 1080, camera); });
+  constexpr int width = 1920;
+  constexpr int height = 1080;
+  auto image = new unsigned char[height][width][BYTES_PER_PIXEL];
+  auto imageFileName = "bitmapImage.bmp";
 
-#if 0
-    constexpr int width = 1920;
-    constexpr int height = 1080;
-    auto image = new unsigned char[height][width][BYTES_PER_PIXEL];
-    auto imageFileName = "bitmapImage.bmp";
+  int i, j;
+  for (i = 0; i < height; i++) {
+      for (j = 0; j < width; j++) {
+          image[height - i - 1][j][2] = (unsigned char) ( pixels[j + width * i].m_red);             ///red
+          image[height - i - 1][j][1] = (unsigned char) ( pixels[j + width * i].m_green );              ///green
+          image[height - i - 1][j][0] = (unsigned char) ( pixels[j + width * i].m_blue ); ///blue
+      }
+  }
 
-    int i, j;
-    for (i = 0; i < height; i++) {
-        for (j = 0; j < width; j++) {
-            image[height - i - 1][j][2] = (unsigned char) ( pixels[j + width * i].m_red);             ///red
-            image[height - i - 1][j][1] = (unsigned char) ( pixels[j + width * i].m_green );              ///green
-            image[height - i - 1][j][0] = (unsigned char) ( pixels[j + width * i].m_blue ); ///blue
-        }
-    }
-
-    generateBitmapImage((unsigned char*) image, height, width, imageFileName);
-    printf("Image generated!!");
-#endif
+  generateBitmapImage((unsigned char*) image, height, width, imageFileName);
+  printf("Image generated!!");
 }
 
 int main(int argc, const char** argv) {
