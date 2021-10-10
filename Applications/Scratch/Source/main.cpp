@@ -129,6 +129,12 @@ struct Color {
   friend auto operator <=>(const Color&, const Color&) = default;
 };
 
+std::ostream& operator <<(std::ostream& out, Color color) {
+  return out << "Color(" << static_cast<int>(color.m_red) << ' ' <<
+    static_cast<int>(color.m_green) << ' ' << static_cast<int>(color.m_blue) <<
+    ' ' << static_cast<int>(color.m_alpha) << ')';
+}
+
 struct Point {
   float m_x;
   float m_y;
@@ -151,6 +157,11 @@ struct Voxel {
 
   friend auto operator <=>(const Voxel&, const Voxel&) = default;
 };
+
+std::ostream& operator <<(std::ostream& out, Voxel voxel) {
+  return out <<
+    "Voxel(" << voxel.m_color << ')';
+}
 
 struct Vector {
   float m_x;
@@ -246,27 +257,27 @@ Point compute_boundary(const Ray& ray, Point start, int size) {
       return INFINITY;
     }
     if(ray.m_direction.m_x > 0) {
-      return start.m_x + size + 1 - ray.m_point.m_x;
+      return start.m_x + size - ray.m_point.m_x;
     }
-    return start.m_x - 1 - ray.m_point.m_x;
+    return start.m_x - ray.m_point.m_x - 1;
   }();
   auto y_distance = [&] {
     if(ray.m_direction.m_y == 0) {
       return INFINITY;
     }
     if(ray.m_direction.m_y > 0) {
-      return start.m_y + size + 1 - ray.m_point.m_y;
+      return start.m_y + size - ray.m_point.m_y;
     }
-    return start.m_y - 1 - ray.m_point.m_y;
+    return start.m_y - ray.m_point.m_y - 1;
   }();
   auto z_distance = [&] {
     if(ray.m_direction.m_z == 0) {
       return INFINITY;
     }
     if(ray.m_direction.m_z > 0) {
-      return start.m_z + size + 1 - ray.m_point.m_z;
+      return start.m_z + size - ray.m_point.m_z;
     }
-    return start.m_z - 1 - ray.m_point.m_z;
+    return start.m_z - ray.m_point.m_z - 1;
   }();
   auto t = INFINITY;
   if(x_distance != INFINITY) {
@@ -697,25 +708,25 @@ void intersect(const Scene& scene, compute::vector<Color>& pixels,
           if(ray.m_direction.m_x == 0) {
             x_distance = INFINITY;
           } else if(ray.m_direction.m_x > 0) {
-            x_distance = start.m_x + size + 1 - ray.m_point.m_x;
+            x_distance = start.m_x + size - ray.m_point.m_x;
           } else {
-            x_distance = start.m_x - 1 - ray.m_point.m_x;
+            x_distance = start.m_x - ray.m_point.m_x - 1;
           }
           float y_distance;
           if(ray.m_direction.m_y == 0) {
             y_distance = INFINITY;
           } else if(ray.m_direction.m_y > 0) {
-            y_distance = start.m_y + size + 1 - ray.m_point.m_y;
+            y_distance = start.m_y + size - ray.m_point.m_y;
           } else {
-            y_distance = start.m_y - 1 - ray.m_point.m_y;
+            y_distance = start.m_y - ray.m_point.m_y - 1;
           }
           float z_distance;
           if(ray.m_direction.m_z == 0) {
             z_distance = INFINITY;
           } else if(ray.m_direction.m_z > 0) {
-            z_distance = start.m_z + size + 1 - ray.m_point.m_z;
+            z_distance = start.m_z + size - ray.m_point.m_z;
           } else {
-            z_distance = start.m_z - 1 - ray.m_point.m_z;
+            z_distance = start.m_z - ray.m_point.m_z - 1;
           }
           float t = INFINITY;
           if(x_distance != INFINITY) {
@@ -742,8 +753,16 @@ void intersect(const Scene& scene, compute::vector<Color>& pixels,
             point.m_z >= start.m_z && point.m_z < end.m_z;
         }
 
+        void print_point(Point point) {
+          printf("Point(%f, %f, %f)", point.m_x, point.m_y, point.m_z);
+        }
+
+        void print_vector(Vector vector) {
+          printf("Vector(%f, %f, %f)", vector.m_x, vector.m_y, vector.m_z);
+        }
+
         Voxel trace(Scene scene, Ray ray) {
-          while(contains(make_point(-256, -256, -256), make_point(
+          while(contains(make_point(-256, -256, -2048), make_point(
               scene.m_width, scene.m_height, scene.m_depth), ray.m_point)) {
             Voxel voxel = get_voxel_from_scene(scene, ray.m_point);
             if(!is_none_voxel(voxel)) {
@@ -785,32 +804,31 @@ void intersect(const Scene& scene, compute::vector<Color>& pixels,
     return program.create_kernel("intersect");
   }();
   auto host = std::vector<Voxel>();
-  auto s = profile([&] {
-    auto s = compute::vector<Voxel>(256 * 256 * 256, accelerator.m_context);
-    host.resize(256 * 256 * 256, Voxel::NONE());
-    for(auto x = 0; x < 100; ++x) {
-      for(auto y = 0; y < 100; ++y) {
-        for(auto z = 0; z < 100; ++z) {
-          host[x + 256 * (y + 256 * z)] = Voxel(Color(255, 0, 0, 0));
-        }
+  auto s = compute::vector<Voxel>(256 * 256 * 256, accelerator.m_context);
+  host.resize(256 * 256 * 256, Voxel::NONE());
+  for(auto x = 0; x < 100; ++x) {
+    for(auto y = 0; y < 100; ++y) {
+      for(auto z = 0; z < 100; ++z) {
+        host[x + 256 * (y + 256 * z)] = Voxel(Color(255, 0, 0, 0));
       }
     }
-    compute::copy(host.begin(), host.end(), s.begin(), accelerator.m_queue);
-    return s;
+  }
+  compute::copy(host.begin(), host.end(), s.begin(), accelerator.m_queue);
+  profile([&] {
+    kernel.set_arg(0, s.get_buffer());
+    kernel.set_arg(1, 256);
+    kernel.set_arg(2, 256);
+    kernel.set_arg(3, 256);
+    kernel.set_arg(4, pixels.get_buffer());
+    kernel.set_arg(5, width);
+    kernel.set_arg(6, height);
+    kernel.set_arg(7, sizeof(Point), &camera);
+    kernel.set_arg(8, sizeof(Vector), &top_left);
+    kernel.set_arg(9, sizeof(Vector), &x_shift);
+    kernel.set_arg(10, sizeof(Vector), &y_shift);
+    accelerator.m_queue.enqueue_1d_range_kernel(kernel, 0, pixels.size(), 0);
+    accelerator.m_queue.finish();
   });
-  kernel.set_arg(0, s.get_buffer());
-  kernel.set_arg(1, 256);
-  kernel.set_arg(2, 256);
-  kernel.set_arg(3, 256);
-  kernel.set_arg(4, pixels.get_buffer());
-  kernel.set_arg(5, width);
-  kernel.set_arg(6, height);
-  kernel.set_arg(7, sizeof(Point), &camera);
-  kernel.set_arg(8, sizeof(Vector), &top_left);
-  kernel.set_arg(9, sizeof(Vector), &x_shift);
-  kernel.set_arg(10, sizeof(Vector), &y_shift);
-  accelerator.m_queue.enqueue_1d_range_kernel(kernel, 0, pixels.size(), 0);
-  accelerator.m_queue.finish();
 }
 
 std::vector<Color> render_gpu(const Scene& scene, Accelerator& accelerator,
@@ -825,13 +843,10 @@ std::vector<Color> render_gpu(const Scene& scene, Accelerator& accelerator,
     compute::vector<Color>(width * height, accelerator.m_context);
   intersect(scene, device_pixels, width, height, camera.get_position(),
     top_left, x_shift, y_shift, accelerator);
-  auto pixels = profile([&] {
-    auto pixels = std::vector<Color>();
-    pixels.resize(width * height);
-    compute::copy(device_pixels.begin(), device_pixels.end(), pixels.begin(),
-      accelerator.m_queue);
-    return pixels;
-  });
+  auto pixels = std::vector<Color>();
+  pixels.resize(width * height);
+  compute::copy(device_pixels.begin(), device_pixels.end(), pixels.begin(),
+    accelerator.m_queue);
   return pixels;
 }
 
@@ -845,18 +860,20 @@ std::vector<Color> render_cpu(
   auto y_shift = (2.f * aspect_ratio / height) * camera.get_orientation();
   auto pixels = std::vector<Color>();
   pixels.reserve(width * height);
-  for(auto y = 0; y < height; ++y) {
-    for(auto x = 0; x < width; ++x) {
-      auto direction = top_left + x * x_shift - y * y_shift;
-      auto point = camera.get_position() + direction;
-      auto voxel = scene.intersect(point, normalize(direction));
-      if(voxel == Voxel::NONE()) {
-        pixels.push_back(Color(0, 0, 0));
-      } else {
-        pixels.push_back(voxel.m_color);
+  profile([&] {
+    for(auto y = 0; y < height; ++y) {
+      for(auto x = 0; x < width; ++x) {
+        auto direction = top_left + x * x_shift - y * y_shift;
+        auto point = camera.get_position() + direction;
+        auto voxel = scene.intersect(point, normalize(direction));
+        if(voxel == Voxel::NONE()) {
+          pixels.push_back(Color(0, 0, 0));
+        } else {
+          pixels.push_back(voxel.m_color);
+        }
       }
     }
-  }
+  });
   return pixels;
 }
 
@@ -875,9 +892,10 @@ void save_bmp(const std::vector<Color>& pixels, std::string path) {
   auto image = new unsigned char[height][width][BYTES_PER_PIXEL];
   for(auto i = 0; i < height; ++i) {
     for(auto j = 0; j < width; ++j) {
-      image[height - i - 1][j][2] = pixels[j + width * i].m_red;
-      image[height - i - 1][j][1] = pixels[j + width * i].m_green;
-      image[height - i - 1][j][0] = pixels[j + width * i].m_blue;
+      auto& color = pixels[j + width * i];
+      image[height - i - 1][j][2] = color.m_red;
+      image[height - i - 1][j][1] = color.m_green;
+      image[height - i - 1][j][0] = color.m_blue;
     }
   }
   generateBitmapImage((unsigned char*) image, height, width, path.c_str());
@@ -892,8 +910,7 @@ void demo_gpu() {
   camera.set_direction(Vector(0, 0, 1));
   camera.set_orientation(Vector(0, 1, 0));
   auto accelerator = Accelerator(load_gpu());
-  auto pixels =
-    profile([&] { return render_gpu(scene, accelerator, 1920, 1080, camera); });
+  auto pixels = render_gpu(scene, accelerator, 1920, 1080, camera);
   save_bmp(pixels, "gpu.bmp");
 }
 
@@ -905,8 +922,7 @@ void demo_cpu() {
   camera.set_position(Point(0, 0, -100));
   camera.set_direction(Vector(0, 0, 1));
   camera.set_orientation(Vector(0, 1, 0));
-  auto pixels =
-    profile([&] { return render_cpu(scene, 1920, 1080, camera); });
+  auto pixels = render_cpu(scene, 1920, 1080, camera);
   save_bmp(pixels, "cpu.bmp");
 }
 
