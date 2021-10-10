@@ -216,12 +216,6 @@ float magnitude(Vector vector) {
     vector.m_y * vector.m_y + vector.m_z * vector.m_z);
 }
 
-bool contains(Point start, Point end, Point point) {
-  return point.m_x >= start.m_x && point.m_x < end.m_x &&
-    point.m_y >= start.m_y && point.m_y < end.m_y &&
-    point.m_z >= start.m_z && point.m_z < end.m_z;
-}
-
 struct Ray {
   Point m_point;
   Vector m_direction;
@@ -276,6 +270,12 @@ Point compute_boundary(const Ray& ray, Point start, int size) {
     }
   }
   return point_at(ray, t);
+}
+
+bool contains(Point start, Point end, Point point) {
+  return point.m_x >= start.m_x && point.m_x < end.m_x &&
+    point.m_y >= start.m_y && point.m_y < end.m_y &&
+    point.m_z >= start.m_z && point.m_z < end.m_z;
 }
 
 class Model {
@@ -544,28 +544,269 @@ class Camera {
     Vector m_orientation;
 };
 
-std::vector<Color> render(const Scene& scene, Accelerator& accelerator,
-    int width, int height, const Camera& camera) {
-  auto pixels = std::vector<Color>();
-  pixels.reserve(width * height);
-  auto aspect_ratio = static_cast<float>(height) / width;
-  auto roll = cross(camera.get_orientation(), camera.get_direction());
-  auto top_left_direction =
-    camera.get_direction() - roll + aspect_ratio * camera.get_orientation();
-  auto x_shift = (2.f / width) * roll;
-  auto y_shift = (2 * aspect_ratio / height) * camera.get_orientation();
-  for(auto y = 0; y < height; ++y) {
-    for(auto x = 0; x < width; ++x) {
-      auto direction = top_left_direction + x * x_shift - y * y_shift;
-      auto point = camera.get_position() + direction;
-      auto voxel = scene.intersect(point, direction);
-      if(voxel == Voxel::NONE()) {
-        pixels.push_back(Color(0, 0, 0));
-      } else {
-        pixels.push_back(voxel.m_color);
-      }
+BOOST_COMPUTE_ADAPT_STRUCT(Color, Color, (m_red, m_green, m_blue, m_alpha));
+BOOST_COMPUTE_ADAPT_STRUCT(Voxel, Voxel, (m_color));
+BOOST_COMPUTE_ADAPT_STRUCT(Point, Point, (m_x, m_y, m_z));
+BOOST_COMPUTE_ADAPT_STRUCT(Vector, Vector, (m_x, m_y, m_z));
+BOOST_COMPUTE_ADAPT_STRUCT(Ray, Ray, (m_point, m_direction));
+
+void intersect(const Scene& scene, compute::vector<Color>& pixels,
+    int width, int height, Point camera, Vector top_left, Vector x_shift,
+    Vector y_shift, Accelerator& accelerator) {
+  static auto kernel = [&] {
+    static auto source = compute::type_definition<Color>() +
+      compute::type_definition<Voxel>() +
+      compute::type_definition<Point>() +
+      compute::type_definition<Vector>() +
+      compute::type_definition<Ray>() +
+      BOOST_COMPUTE_STRINGIZE_SOURCE(
+        typedef struct {
+          int m_width;
+          int m_height;
+          int m_depth;
+          __global Voxel* m_points;
+        } Scene;
+
+        Voxel make_voxel(Color color) {
+          Voxel voxel;
+          voxel.m_color = color;
+          return voxel;
+        }
+
+        Color make_color(unsigned char red, unsigned green, unsigned char blue,
+            unsigned char alpha) {
+          Color color;
+          color.m_red = red;
+          color.m_green = green;
+          color.m_blue = blue;
+          color.m_alpha = alpha;
+          return color;
+        }
+
+        Point make_point(float x, float y, float z) {
+          Point point;
+          point.m_x = x;
+          point.m_y = y;
+          point.m_z = z;
+          return point;
+        }
+
+        Point exact_point(Point point) {
+          return make_point(
+            (int)(point.m_x), (int)(point.m_y), (int)(point.m_z));
+        }
+
+        Vector make_vector(float x, float y, float z) {
+          Vector vector;
+          vector.m_x = x;
+          vector.m_y = y;
+          vector.m_z = z;
+          return vector;
+        }
+
+        Vector add_vector(Vector left, Vector right) {
+          left.m_x += right.m_x;
+          left.m_y += right.m_y;
+          left.m_z += right.m_z;
+          return left;
+        }
+
+        Vector sub_vector(Vector left, Vector right) {
+          left.m_x -= right.m_x;
+          left.m_y -= right.m_y;
+          left.m_z -= right.m_z;
+          return left;
+        }
+
+        Vector mul_int_vector(int left, Vector right) {
+          right.m_x *= left;
+          right.m_y *= left;
+          right.m_z *= left;
+          return right;
+        }
+
+        Vector mul_float_vector(float left, Vector right) {
+          right.m_x *= left;
+          right.m_y *= left;
+          right.m_z *= left;
+          return right;
+        }
+
+        Vector div_vector_float(Vector left, float right) {
+          left.m_x /= right;
+          left.m_y /= right;
+          left.m_z /= right;
+          return left;
+        }
+
+        Point add_point_vector(Point point, Vector vector) {
+          point.m_x += vector.m_x;
+          point.m_y += vector.m_y;
+          point.m_z += vector.m_z;
+          return point;
+        }
+
+        float magnitude(Vector vector) {
+          return sqrt(vector.m_x * vector.m_x +
+            vector.m_y * vector.m_y + vector.m_z * vector.m_z);
+        }
+
+        Vector norm(Vector vector) {
+          return div_vector_float(vector, magnitude(vector));
+        }
+
+        bool is_equal_color(Color left, Color right) {
+          return left.m_red == right.m_red && left.m_green == right.m_green &&
+            left.m_blue == right.m_blue && left.m_alpha == right.m_alpha;
+        }
+
+        bool is_none_voxel(Voxel voxel) {
+          return is_equal_color(voxel.m_color, make_color(0, 0, 0, 255));
+        }
+
+        Voxel get_voxel_from_scene(Scene scene, Point point) {
+          size_t index = (size_t)(point.m_x) + scene.m_width *
+            ((size_t)(point.m_y) + scene.m_height * (size_t)(point.m_z));
+          return scene.m_points[index];
+        }
+
+        Point point_at(Ray ray, float t) {
+          return add_point_vector(
+            ray.m_point, mul_float_vector(t, ray.m_direction));
+        }
+
+        Point compute_boundary(Ray ray, Point start, int size) {
+          float x_distance;
+          if(ray.m_direction.m_x == 0) {
+            x_distance = INFINITY;
+          } else if(ray.m_direction.m_x > 0) {
+            x_distance = start.m_x + size + 1 - ray.m_point.m_x;
+          } else {
+            x_distance = start.m_x - 1 - ray.m_point.m_x;
+          }
+          float y_distance;
+          if(ray.m_direction.m_y == 0) {
+            y_distance = INFINITY;
+          } else if(ray.m_direction.m_y > 0) {
+            y_distance = start.m_y + size + 1 - ray.m_point.m_y;
+          } else {
+            y_distance = start.m_y - 1 - ray.m_point.m_y;
+          }
+          float z_distance;
+          if(ray.m_direction.m_z == 0) {
+            z_distance = INFINITY;
+          } else if(ray.m_direction.m_z > 0) {
+            z_distance = start.m_z + size + 1 - ray.m_point.m_z;
+          } else {
+            z_distance = start.m_z - 1 - ray.m_point.m_z;
+          }
+          auto t = INFINITY;
+          if(x_distance != INFINITY) {
+            t = x_distance / ray.m_direction.m_x;
+          }
+          if(y_distance != INFINITY) {
+            float r = y_distance / ray.m_direction.m_y;
+            if(r < t) {
+              t = r;
+            }
+          }
+          if(z_distance != INFINITY) {
+            float r = z_distance / ray.m_direction.m_z;
+            if(r < t) {
+              t = r;
+            }
+          }
+          return point_at(ray, t);
+        }
+
+        bool contains(Point start, Point end, Point point) {
+          return point.m_x >= start.m_x && point.m_x < end.m_x &&
+            point.m_y >= start.m_y && point.m_y < end.m_y &&
+            point.m_z >= start.m_z && point.m_z < end.m_z;
+        }
+
+        Voxel trace(Scene scene, Ray ray) {
+          while(contains(make_point(0, 0, 0), make_point(
+              scene.m_width, scene.m_height, scene.m_depth), ray.m_point)) {
+            Voxel voxel = get_voxel_from_scene(scene, ray.m_point);
+            if(!is_none_voxel(voxel)) {
+              return voxel;
+            }
+            ray.m_point = compute_boundary(ray, exact_point(ray.m_point), 1);
+          }
+          return make_voxel(make_color(0, 0, 0, 255));
+        }
+
+        __kernel void intersect(__global Voxel* points, int scene_width,
+            int scene_height, int scene_depth, __global Color* pixels,
+            int width, int height, Point camera, Vector top_left,
+            Vector x_shift, Vector y_shift) {
+          int i = get_global_id(0);
+          int x = i % width;
+          int y = i / width;
+          Scene scene;
+          scene.m_width = scene_width;
+          scene.m_height = scene_height;
+          scene.m_depth = scene_depth;
+          scene.m_points = points;
+          Vector direction = sub_vector(add_vector(
+            top_left, mul_int_vector(x, x_shift)), mul_int_vector(y, y_shift));
+          Ray ray;
+          ray.m_point = add_point_vector(camera, direction);
+          ray.m_direction = norm(direction);
+          Voxel voxel = trace(scene, ray);
+          if(is_none_voxel(voxel)) {
+            pixels[i] = make_color(0, 0, 0, 0);
+          } else {
+            pixels[i] = voxel.m_color;
+          }
+        });
+    auto cache =
+      compute::program_cache::get_global_cache(accelerator.m_context);
+    auto key = std::string("__intersect");
+    auto program = cache->get_or_build(key, {}, source, accelerator.m_context);
+    return program.create_kernel("intersect");
+  }();
+  auto host = std::vector<Voxel>();
+  host.resize(256 * 256 * 256, Voxel::NONE());
+  for(auto x = 0; x < 256; ++x) {
+    for(auto y = 0; y < 256; ++y) {
+      host[x + 256 * (y + 256 * 100)] = Voxel(Color(255, 255, 0, 0));
     }
   }
+  auto s = compute::vector<Voxel>(256 * 256 * 256, accelerator.m_context);
+  compute::copy(host.begin(), host.end(), s.begin(), accelerator.m_queue);
+  kernel.set_arg(0, s.get_buffer());
+  kernel.set_arg(1, 256);
+  kernel.set_arg(2, 256);
+  kernel.set_arg(3, 256);
+  kernel.set_arg(4, pixels.get_buffer());
+  kernel.set_arg(5, width);
+  kernel.set_arg(6, height);
+  kernel.set_arg(7, sizeof(Point), &camera);
+  kernel.set_arg(8, sizeof(Vector), &top_left);
+  kernel.set_arg(9, sizeof(Vector), &x_shift);
+  kernel.set_arg(10, sizeof(Vector), &y_shift);
+  accelerator.m_queue.enqueue_1d_range_kernel(kernel, 0, pixels.size(), 0);
+  accelerator.m_queue.finish();
+}
+
+std::vector<Color> render(const Scene& scene, Accelerator& accelerator,
+    int width, int height, const Camera& camera) {
+  auto aspect_ratio = static_cast<float>(height) / width;
+  auto roll = cross(camera.get_orientation(), camera.get_direction());
+  auto top_left =
+    camera.get_direction() - roll + aspect_ratio * camera.get_orientation();
+  auto x_shift = (2.f / width) * roll;
+  auto y_shift = (2.f * aspect_ratio / height) * camera.get_orientation();
+  auto device_pixels =
+    compute::vector<Color>(width * height, accelerator.m_context);
+  intersect(scene, device_pixels, width, height, camera.get_position(),
+    top_left, x_shift, y_shift, accelerator);
+  auto pixels = std::vector<Color>();
+  pixels.resize(width * height);
+  compute::copy(device_pixels.begin(), device_pixels.end(), pixels.begin(),
+    accelerator.m_queue);
   return pixels;
 }
 
@@ -584,7 +825,7 @@ void demo_scene() {
   auto cube = std::make_shared<Cube>(100, Color(255, 0, 0, 0));
   scene.add(cube);
   auto camera = Camera();
-  camera.set_position(Point(30, 0, -1000));
+  camera.set_position(Point(0, 0, 0));
   camera.set_direction(Vector(0, 0, 1));
   camera.set_orientation(Vector(0, 1, 0));
   auto pixels =
