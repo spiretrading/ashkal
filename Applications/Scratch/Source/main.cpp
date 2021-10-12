@@ -338,6 +338,33 @@ class Cube : public Model {
     Color m_color;
 };
 
+class Sphere : public Model {
+  public:
+    Sphere(int radius, Color color)
+      : m_radius(radius),
+        m_inner(float(m_radius - 1), float(m_radius - 1), float(m_radius - 1)),
+        m_color(color) {}
+
+    Point end() const override {
+      return Point(2 * static_cast<float>(m_radius) - 1,
+        2 * static_cast<float>(m_radius) - 1,
+        2 * static_cast<float>(m_radius) - 1);
+    }
+
+    Voxel get(Point point) const override {
+      auto range = floor(point) - m_inner;
+      if(dot(range, range) <= m_radius * m_radius) {
+        return Voxel(m_color);
+      }
+      return Voxel::NONE();
+    }
+
+  private:
+    int m_radius;
+    Point m_inner;
+    Color m_color;
+};
+
 class OctreeNode {
   public:
     virtual ~OctreeNode() = default;
@@ -349,6 +376,8 @@ class OctreeNode {
     Point get_end() const {
       return m_end;
     }
+
+    virtual Voxel get(Point point) const = 0;
 
     virtual Voxel intersect(Point& point, Vector direction) const = 0;
 
@@ -369,7 +398,7 @@ class OctreeLeaf : public OctreeNode {
     OctreeLeaf(Point start, int size)
       : OctreeNode(start, size) {}
 
-    Voxel get(Point point) const {
+    Voxel get(Point point) const override {
       for(auto& model : m_models) {
         auto voxel = model->get(point);
         if(voxel != Voxel::NONE()) {
@@ -448,6 +477,10 @@ class OctreeInternalNode : public OctreeNode {
       }
     }
 
+    Voxel get(Point point) const override {
+      return get_node(point).get(point);
+    }
+
     Voxel intersect(Point& point, Vector direction) const {
       if(m_is_empty) {
         point = compute_boundary(Ray(point, direction), get_start(),
@@ -521,6 +554,10 @@ class Scene {
   public:
     Scene()
       : m_root(Point(-2048, -2048, -2048), 4096) {}
+
+    Voxel get(Point point) const {
+      return m_root.get(point);
+    }
 
     Voxel intersect(Point point, Vector direction) const {
       return m_root.intersect(point, direction);
@@ -762,7 +799,7 @@ void intersect(const Scene& scene, compute::vector<Color>& pixels,
         }
 
         Voxel trace(Scene scene, Ray ray) {
-          while(contains(make_point(-256, -256, -2048), make_point(
+          while(contains(make_point(-64, -64, -2048), make_point(
               scene.m_width, scene.m_height, scene.m_depth), ray.m_point)) {
             Voxel voxel = get_voxel_from_scene(scene, ray.m_point);
             if(!is_none_voxel(voxel)) {
@@ -803,22 +840,24 @@ void intersect(const Scene& scene, compute::vector<Color>& pixels,
     auto program = cache->get_or_build(key, {}, source, accelerator.m_context);
     return program.create_kernel("intersect");
   }();
+  auto SIZE = 64;
   auto host = std::vector<Voxel>();
-  auto s = compute::vector<Voxel>(256 * 256 * 256, accelerator.m_context);
-  host.resize(256 * 256 * 256, Voxel::NONE());
-  for(auto x = 0; x < 100; ++x) {
-    for(auto y = 0; y < 100; ++y) {
-      for(auto z = 0; z < 100; ++z) {
-        host[x + 256 * (y + 256 * z)] = Voxel(Color(255, 0, 0, 0));
+  host.resize(SIZE * SIZE * SIZE, Voxel::NONE());
+  auto s = compute::vector<Voxel>(SIZE * SIZE * SIZE, accelerator.m_context);
+  profile([&] {
+    for(auto x = 0; x < SIZE; ++x) {
+      for(auto y = 0; y < SIZE; ++y) {
+        for(auto z = 0; z < SIZE; ++z) {
+          host[x + SIZE * (y + SIZE * z)] = scene.get(Point(
+            static_cast<float>(x), static_cast<float>(y), static_cast<float>(z)));
+        }
       }
     }
-  }
-  compute::copy(host.begin(), host.end(), s.begin(), accelerator.m_queue);
-  profile([&] {
+    compute::copy(host.begin(), host.end(), s.begin(), accelerator.m_queue);
     kernel.set_arg(0, s.get_buffer());
-    kernel.set_arg(1, 256);
-    kernel.set_arg(2, 256);
-    kernel.set_arg(3, 256);
+    kernel.set_arg(1, SIZE);
+    kernel.set_arg(2, SIZE);
+    kernel.set_arg(3, SIZE);
     kernel.set_arg(4, pixels.get_buffer());
     kernel.set_arg(5, width);
     kernel.set_arg(6, height);
@@ -901,25 +940,24 @@ void save_bmp(const std::vector<Color>& pixels, std::string path) {
   generateBitmapImage((unsigned char*) image, height, width, path.c_str());
 }
 
-void demo_gpu() {
+void demo_gpu(Accelerator& accelerator) {
   auto scene = Scene();
-  auto cube = std::make_shared<Cube>(100, Color(255, 0, 0, 0));
-  scene.add(cube);
+  auto shape = std::make_shared<Sphere>(10, Color(255, 0, 0, 0));
+  scene.add(shape);
   auto camera = Camera();
-  camera.set_position(Point(0, 0, -100));
+  camera.set_position(Point(9.5f, 9.5f, -10));
   camera.set_direction(Vector(0, 0, 1));
   camera.set_orientation(Vector(0, 1, 0));
-  auto accelerator = Accelerator(load_gpu());
   auto pixels = render_gpu(scene, accelerator, 1920, 1080, camera);
   save_bmp(pixels, "gpu.bmp");
 }
 
 void demo_cpu() {
   auto scene = Scene();
-  auto cube = std::make_shared<Cube>(100, Color(255, 0, 0, 0));
-  scene.add(cube);
+  auto shape = std::make_shared<Sphere>(10, Color(255, 0, 0, 0));
+  scene.add(shape);
   auto camera = Camera();
-  camera.set_position(Point(0, 0, -100));
+  camera.set_position(Point(9.5f, 9.5f, -10));
   camera.set_direction(Vector(0, 0, 1));
   camera.set_orientation(Vector(0, 1, 0));
   auto pixels = render_cpu(scene, 1920, 1080, camera);
@@ -927,7 +965,9 @@ void demo_cpu() {
 }
 
 int main(int argc, const char** argv) {
-  demo_gpu();
+  auto accelerator = Accelerator(load_gpu());
+  demo_gpu(accelerator);
   demo_cpu();
+  demo_gpu(accelerator);
   return 0;
 }
