@@ -28,6 +28,21 @@ IF NOT EXIST doctest-2.4.6 (
   )
   DEL /F /Q 2.4.6.zip
 )
+IF NOT EXIST glew-2.1.0 (
+  wget https://sourceforge.net/projects/glew/files/glew/2.1.0/glew-2.1.0.zip/download -O glew-2.1.0.zip --no-check-certificate
+  IF !ERRORLEVEL! LEQ 0 (
+    unzip glew-2.1.0.zip
+    PUSHD glew-2.1.0
+    cd build
+    cmake ./cmake
+    cmake --build . --target glew_s --config Debug
+    cmake --build . --target glew_s --config Release
+    POPD
+  ) ELSE (
+    SET EXIT_STATUS=1
+  )
+  DEL /F /Q glew-2.1.0.zip
+)
 IF NOT EXIST OpenCL-SDK (
   git clone https://github.com/KhronosGroup/OpenCL-SDK.git
   PUSHD OpenCL-SDK
@@ -35,11 +50,24 @@ IF NOT EXIST OpenCL-SDK (
   git submodule update
   mkdir build
   PUSHD build
-  cmake -A Win32 ..
+  cmake ..
   cmake --build . --target INSTALL --config Debug
   cmake --build . --target INSTALL --config Release
   POPD
   POPD
+)
+IF NOT EXIST SDL2-2.0.16 (
+  wget https://www.libsdl.org/release/SDL2-2.0.16.zip
+  unzip SDL2-2.0.16
+  PUSHD SDL2-2.0.16
+  mkdir build
+  PUSHD build
+  cmake ..
+  cmake --build . --target INSTALL --config Debug
+  cmake --build . --target INSTALL --config Release
+  POPD
+  POPD
+  DEL SDL2-2.0.16.zip
 )
 IF "%NUMBER_OF_PROCESSORS%" == "" (
   SET BJAM_PROCESSORS=
@@ -54,8 +82,8 @@ IF NOT EXIST boost_1_77_0 (
     PUSHD tools\build
     CALL bootstrap.bat vc142
     POPD
-    tools\build\b2 !BJAM_PROCESSORS! --without-context --prefix="!ROOT!\boost_1_77_0" --build-type=complete address-model=32 toolset=msvc-14.2 link=static,shared runtime-link=shared install
-    tools\build\b2 !BJAM_PROCESSORS! --with-context --prefix="!ROOT!\boost_1_77_0" --build-type=complete address-model=32 toolset=msvc-14.2 link=static runtime-link=shared install
+    tools\build\b2 !BJAM_PROCESSORS! --without-context --prefix="!ROOT!\boost_1_77_0" --build-type=complete address-model=64 toolset=msvc-14.2 link=static,shared runtime-link=shared install
+    tools\build\b2 !BJAM_PROCESSORS! --with-context --prefix="!ROOT!\boost_1_77_0" --build-type=complete address-model=64 toolset=msvc-14.2 link=static runtime-link=shared install
     POPD
   ) ELSE (
     SET EXIT_STATUS=1

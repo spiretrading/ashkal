@@ -4,20 +4,26 @@
 #include <iostream>
 #include <stdio.h>
 #include <vector>
+#include <GL/glew.h>
+#include <SDL.h>
+#include <SDL_opengl.h>
+#undef main
+#include <GL/GL.h>
+#include <GL/GLU.h>
+#include <Windows.h>
 #include <boost/compute.hpp>
+#include <boost/compute/interop/opengl/context.hpp>
 #include "Version.hpp"
 
 using namespace boost;
 
 struct Accelerator {
-  compute::device m_device;
   compute::context m_context;
   compute::command_queue m_queue;
 
-  Accelerator(compute::device device)
-    : m_device(std::move(device)),
-      m_context(compute::context(m_device)),
-      m_queue(compute::command_queue(m_context, m_device)) {}
+  Accelerator()
+    : m_context(compute::opengl_create_shared_context()),
+      m_queue(m_context, m_context.get_device()) {}
 };
 
 template<typename F>
@@ -878,6 +884,11 @@ std::vector<Color> render_gpu(const Scene& scene, Accelerator& accelerator,
     camera.get_direction() - roll + aspect_ratio * camera.get_orientation();
   auto x_shift = (2.f / width) * roll;
   auto y_shift = (2.f * aspect_ratio / height) * camera.get_orientation();
+  glGenBuffers(1, &vbo);
+  glBindBuffer(GL_ARRAY_BUFFER, vbo);
+  glBufferData(GL_ARRAY_BUFFER, 400, NULL, GL_STATIC_DRAW);
+
+
   auto device_pixels =
     compute::vector<Color>(width * height, accelerator.m_context);
   intersect(scene, device_pixels, width, height, camera.get_position(),
@@ -914,15 +925,6 @@ std::vector<Color> render_cpu(
     }
   });
   return pixels;
-}
-
-compute::device load_gpu() {
-  for(auto& device : compute::system::devices()) {
-    if(device.type() == compute::device::type::gpu) {
-      return device;
-    }
-  }
-  throw compute::no_device_found();
 }
 
 void save_bmp(const std::vector<Color>& pixels, std::string path) {
@@ -964,10 +966,51 @@ void demo_cpu() {
   save_bmp(pixels, "cpu.bmp");
 }
 
-int main(int argc, const char** argv) {
-  auto accelerator = Accelerator(load_gpu());
-  demo_gpu(accelerator);
-  demo_cpu();
-  demo_gpu(accelerator);
+int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
+    LPSTR pCmdLine, int nCmdShow) {
+  if(SDL_Init(SDL_INIT_EVERYTHING) < 0) {
+    std::cout << "Error initializing SDL: " << SDL_GetError() << std::endl;
+    return 1;
+  }
+  SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 2);
+  SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 1);
+  auto window = SDL_CreateWindow("Example", SDL_WINDOWPOS_UNDEFINED,
+    SDL_WINDOWPOS_UNDEFINED, 1920, 1080, SDL_WINDOW_OPENGL | SDL_WINDOW_SHOWN);
+  if(!window) {
+    std::cout << "Error creating window: " << SDL_GetError() << std::endl;
+    return 1;
+  }
+  auto glContext = SDL_GL_CreateContext(window);
+  if(SDL_GL_SetSwapInterval(1) < 0) {
+    std::cout <<
+      "Warning: Unable to set VSync: " << SDL_GetError() << std::endl;
+  }
+  auto running = true;
+  auto event = SDL_Event();
+  auto gl_context = SDL_GL_GetCurrentContext();
+  auto windowId = SDL_GetWindowID(window);
+  auto accelerator = Accelerator();
+  render_gpu();
+  while(running) {
+    SDL_WaitEvent(&event);
+    switch(event.type) {
+      case SDL_WINDOWEVENT:
+        if(event.window.windowID == windowId)  {
+          switch(event.window.event) {
+            case SDL_WINDOWEVENT_CLOSE:
+              event.type = SDL_QUIT;
+              SDL_PushEvent(&event);
+              break;
+          }
+        }
+        break;
+      case SDL_QUIT:
+        running = false;
+        break;
+    }
+  }
+  SDL_DestroyWindow(window);
+  SDL_GL_DeleteContext(glContext);
+  SDL_Quit();
   return 0;
 }
