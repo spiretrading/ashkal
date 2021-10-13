@@ -2,7 +2,6 @@ set(BOOST_INCLUDE_PATH
   "${PROJECT_BINARY_DIR}/Dependencies/boost_1_77_0/include/boost-1_77")
 set(BOOST_DEBUG_PATH "${PROJECT_BINARY_DIR}/Dependencies/boost_1_77_0/lib")
 set(BOOST_OPTIMIZED_PATH "${PROJECT_BINARY_DIR}/Dependencies/boost_1_77_0/lib")
-
 set(GLEW_INCLUDE_PATH "${PROJECT_BINARY_DIR}/Dependencies/glew-2.1.0/include")
 set(GLEW_LIBRARY_DEBUG_PATH
   "${PROJECT_BINARY_DIR}/Dependencies/glew-2.1.0/build/lib/Debug/libglew32d.lib")

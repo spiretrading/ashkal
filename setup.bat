@@ -31,7 +31,7 @@ IF NOT EXIST doctest-2.4.6 (
 IF NOT EXIST glew-2.1.0 (
   wget https://sourceforge.net/projects/glew/files/glew/2.1.0/glew-2.1.0.zip/download -O glew-2.1.0.zip --no-check-certificate
   IF !ERRORLEVEL! LEQ 0 (
-    unzip glew-2.1.0.zip
+    tar -xf glew-2.1.0.zip
     PUSHD glew-2.1.0
     cd build
     cmake ./cmake
@@ -58,7 +58,7 @@ IF NOT EXIST OpenCL-SDK (
 )
 IF NOT EXIST SDL2-2.0.16 (
   wget https://www.libsdl.org/release/SDL2-2.0.16.zip
-  unzip SDL2-2.0.16
+  tar -xf SDL2-2.0.16.zip
   PUSHD SDL2-2.0.16
   mkdir build
   PUSHD build

@@ -884,11 +884,6 @@ std::vector<Color> render_gpu(const Scene& scene, Accelerator& accelerator,
     camera.get_direction() - roll + aspect_ratio * camera.get_orientation();
   auto x_shift = (2.f / width) * roll;
   auto y_shift = (2.f * aspect_ratio / height) * camera.get_orientation();
-  glGenBuffers(1, &vbo);
-  glBindBuffer(GL_ARRAY_BUFFER, vbo);
-  glBufferData(GL_ARRAY_BUFFER, 400, NULL, GL_STATIC_DRAW);
-
-
   auto device_pixels =
     compute::vector<Color>(width * height, accelerator.m_context);
   intersect(scene, device_pixels, width, height, camera.get_position(),
@@ -981,33 +976,48 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
     return 1;
   }
   auto glContext = SDL_GL_CreateContext(window);
-  if(SDL_GL_SetSwapInterval(1) < 0) {
-    std::cout <<
-      "Warning: Unable to set VSync: " << SDL_GetError() << std::endl;
+  if(glewInit() != GLEW_OK) {
+    std::cout << "Error initializing GLEW." << std::endl;
+    return 1;
   }
+//  if(SDL_GL_SetSwapInterval(1) < 0) {
+//    std::cout <<
+//      "Warning: Unable to set VSync: " << SDL_GetError() << std::endl;
+//  }
   auto running = true;
   auto event = SDL_Event();
   auto gl_context = SDL_GL_GetCurrentContext();
   auto windowId = SDL_GetWindowID(window);
   auto accelerator = Accelerator();
-  render_gpu();
+//  render_gpu();
   while(running) {
-    SDL_WaitEvent(&event);
-    switch(event.type) {
-      case SDL_WINDOWEVENT:
-        if(event.window.windowID == windowId)  {
-          switch(event.window.event) {
-            case SDL_WINDOWEVENT_CLOSE:
-              event.type = SDL_QUIT;
-              SDL_PushEvent(&event);
-              break;
+    if(SDL_PollEvent(&event)) {
+      switch(event.type) {
+        case SDL_WINDOWEVENT:
+          if(event.window.windowID == windowId)  {
+            switch(event.window.event) {
+              case SDL_WINDOWEVENT_CLOSE:
+                event.type = SDL_QUIT;
+                SDL_PushEvent(&event);
+                break;
+            }
           }
-        }
-        break;
-      case SDL_QUIT:
-        running = false;
-        break;
+          break;
+        case SDL_QUIT:
+          running = false;
+          break;
+      }
     }
+    glViewport(0, 0, 1920, 1080);
+    glClearColor(1,1,0,0);
+    glClear(GL_COLOR_BUFFER_BIT);
+    glBegin(GL_TRIANGLES);
+    glColor3f(0.5,0,0);
+    glVertex2f(300.0,210.0);
+    glVertex2f(340.0,215.0);
+    glVertex2f(320.0,250.0);
+    glEnd();
+    SDL_GL_SwapWindow(window);
   }
   SDL_DestroyWindow(window);
   SDL_GL_DeleteContext(glContext);
