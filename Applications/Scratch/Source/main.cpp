@@ -961,13 +961,80 @@ void demo_cpu() {
   save_bmp(pixels, "cpu.bmp");
 }
 
+auto make_shader() {
+  auto programId = glCreateProgram();
+  auto vertexShader = glCreateShader(GL_VERTEX_SHADER);
+  auto vertexShaderSource = BOOST_COMPUTE_STRINGIZE_SOURCE(
+    #version 140\n
+    in vec2 LVertexPos2D;
+    void main() {
+      gl_Position = vec4(LVertexPos2D.x, LVertexPos2D.y, 0, 1);
+    });
+  glShaderSource(vertexShader, 1, &vertexShaderSource, nullptr);
+  glCompileShader(vertexShader);
+  auto shaderCompiled = GL_FALSE;
+  glGetShaderiv(vertexShader, GL_COMPILE_STATUS, &shaderCompiled);
+  if(shaderCompiled != GL_TRUE) {
+    printf( "Unable to compile vertex shader %d!\n", vertexShader );
+    throw std::exception();
+  }
+  glAttachShader(programId, vertexShader);
+  auto fragmentShader = glCreateShader(GL_FRAGMENT_SHADER);
+  auto fragmentShaderSource = BOOST_COMPUTE_STRINGIZE_SOURCE(
+    #version 140\n
+    out vec4 LFragment;
+    void main() {
+      LFragment = vec4( 1.0, 1.0, 1.0, 1.0 );
+    });
+  glShaderSource(fragmentShader, 1, &fragmentShaderSource, nullptr);
+  glCompileShader(fragmentShader);
+  auto fShaderCompiled = GL_FALSE;
+  glGetShaderiv(fragmentShader, GL_COMPILE_STATUS, &fShaderCompiled);
+  if(fShaderCompiled != GL_TRUE) {
+    printf( "Unable to compile fragment shader %d!\n", fragmentShader );
+    throw std::exception();
+  }
+  glAttachShader(programId, fragmentShader);
+  glLinkProgram(programId);
+  auto programSuccess = GL_TRUE;
+  glGetProgramiv(programId, GL_LINK_STATUS, &programSuccess);
+  if(programSuccess != GL_TRUE) {
+    printf("Error linking program %d!\n", programId);
+    throw std::exception();
+  }
+  auto vertexPos2DLocation = glGetAttribLocation(programId, "LVertexPos2D");
+  if(vertexPos2DLocation == -1) {
+    printf( "LVertexPos2D is not a valid glsl program variable!\n" );
+    throw std::exception();
+  }
+  glClearColor(0.f, 0.f, 0.f, 1.f);
+  GLfloat vertexData[] = {
+    -0.5f, -0.5f,
+     0.5f, -0.5f,
+     0.5f,  0.5f,
+    -0.5f,  0.5f
+  };
+  GLuint indexData[] = { 0, 1, 2, 3 };
+  auto vbo = GLuint();
+  auto ibo = GLuint();
+  glGenBuffers(1, &vbo);
+  glBindBuffer(GL_ARRAY_BUFFER, vbo);
+  glBufferData(GL_ARRAY_BUFFER, 2 * 4 * sizeof(GLfloat), vertexData,
+    GL_STATIC_DRAW);
+  glGenBuffers(1, &ibo);
+  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibo);
+  glBufferData(GL_ELEMENT_ARRAY_BUFFER, 4 * sizeof(GLuint), indexData,
+    GL_STATIC_DRAW);
+  return std::tuple(programId, vbo, ibo, vertexPos2DLocation);
+}
+
 int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
     LPSTR pCmdLine, int nCmdShow) {
   if(SDL_Init(SDL_INIT_EVERYTHING) < 0) {
     std::cout << "Error initializing SDL: " << SDL_GetError() << std::endl;
     return 1;
   }
-  SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 2);
+  SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
   SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 1);
   auto window = SDL_CreateWindow("Example", SDL_WINDOWPOS_UNDEFINED,
     SDL_WINDOWPOS_UNDEFINED, 1920, 1080, SDL_WINDOW_OPENGL | SDL_WINDOW_SHOWN);
@@ -980,16 +1047,28 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
     std::cout << "Error initializing GLEW." << std::endl;
     return 1;
   }
-//  if(SDL_GL_SetSwapInterval(1) < 0) {
-//    std::cout <<
-//      "Warning: Unable to set VSync: " << SDL_GetError() << std::endl;
-//  }
+  if(SDL_GL_SetSwapInterval(1) < 0) {
+    std::cout <<
+      "Warning: Unable to set VSync: " << SDL_GetError() << std::endl;
+  }
   auto running = true;
   auto event = SDL_Event();
   auto gl_context = SDL_GL_GetCurrentContext();
   auto windowId = SDL_GetWindowID(window);
   auto accelerator = Accelerator();
 //  render_gpu();
+  auto [programId, vbo, ibo, vertexPos2DLocation] = make_shader();
+    glClear(GL_COLOR_BUFFER_BIT);
+    glUseProgram(programId);
+    glEnableVertexAttribArray(vertexPos2DLocation);
+    glBindBuffer(GL_ARRAY_BUFFER, vbo);
+    glVertexAttribPointer(
+      vertexPos2DLocation, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(GLfloat), nullptr);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibo);
+    glDrawElements(GL_TRIANGLE_FAN, 4, GL_UNSIGNED_INT, NULL);
+    glDisableVertexAttribArray(vertexPos2DLocation);
+    glUseProgram(0);
+    SDL_GL_SwapWindow(window);
   while(running) {
     if(SDL_PollEvent(&event)) {
       switch(event.type) {
@@ -1008,16 +1087,6 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
           break;
       }
     }
-    glViewport(0, 0, 1920, 1080);
-    glClearColor(1,1,0,0);
-    glClear(GL_COLOR_BUFFER_BIT);
-    glBegin(GL_TRIANGLES);
-    glColor3f(0.5,0,0);
-    glVertex2f(300.0,210.0);
-    glVertex2f(340.0,215.0);
-    glVertex2f(320.0,250.0);
-    glEnd();
-    SDL_GL_SwapWindow(window);
   }
   SDL_DestroyWindow(window);
   SDL_GL_DeleteContext(glContext);
