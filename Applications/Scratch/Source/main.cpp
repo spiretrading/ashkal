@@ -772,7 +772,7 @@ void intersect(const Scene& scene, compute::opengl_texture& texture, int width,
   compute::opengl_enqueue_acquire_gl_objects(1, &texture.get(),
     accelerator.m_queue);
   accelerator.m_queue.enqueue_nd_range_kernel(kernel, compute::dim(0, 0),
-    compute::dim(1920, 1080), compute::dim(1, 1));
+    compute::dim(width, height), compute::dim(1, 1));
   compute::opengl_enqueue_release_gl_objects(1, &texture.get(),
     accelerator.m_queue);
   accelerator.m_queue.finish();
@@ -791,8 +791,8 @@ void render_gpu(const Scene& scene, Accelerator& accelerator,
     x_shift, y_shift, accelerator);
 }
 
-std::vector<Color> render_cpu(const Scene& scene, Accelerator& accelerator,
-    compute::opengl_texture& texture, int width, int height,
+void render_cpu(const Scene& scene, Accelerator& accelerator,
+    compute::opengl_texture& texture, GLuint texture_id, int width, int height,
     const Camera& camera) {
   auto aspect_ratio = static_cast<float>(height) / width;
   auto roll = cross(camera.get_orientation(), camera.get_direction());
@@ -814,21 +814,24 @@ std::vector<Color> render_cpu(const Scene& scene, Accelerator& accelerator,
       }
     }
   }
-  return pixels;
+  glBindTexture(GL_TEXTURE_2D, texture_id);
+  glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, width, height, GL_RGBA,
+    GL_UNSIGNED_BYTE, pixels.data());
+  glBindTexture(GL_TEXTURE_2D, 0);
 }
 
-auto make_shader() {
-  auto textureId = GLuint();
-  glGenTextures(1, &textureId);
-  glBindTexture(GL_TEXTURE_2D, textureId);
+auto make_shader(int width, int height) {
+  auto texture_id = GLuint();
+  glGenTextures(1, &texture_id);
+  glBindTexture(GL_TEXTURE_2D, texture_id);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 1920, 1080, 0, GL_RGBA,
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA,
     GL_UNSIGNED_BYTE, nullptr);
   glBindTexture(GL_TEXTURE_2D, 0);
-  return textureId;
+  return texture_id;
 }
 
 int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
@@ -839,13 +842,16 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
   }
   SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
   SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 1);
+  auto width = 1920;
+  auto height = 1080;
   auto window = SDL_CreateWindow("Example", SDL_WINDOWPOS_UNDEFINED,
-    SDL_WINDOWPOS_UNDEFINED, 1920, 1080, SDL_WINDOW_OPENGL | SDL_WINDOW_SHOWN);
+    SDL_WINDOWPOS_UNDEFINED, width, height,
+    SDL_WINDOW_OPENGL | SDL_WINDOW_SHOWN);
   if(!window) {
     std::cout << "Error creating window: " << SDL_GetError() << std::endl;
     return 1;
   }
-  auto glContext = SDL_GL_CreateContext(window);
+  auto gl_context = SDL_GL_CreateContext(window);
   if(glewInit() != GLEW_OK) {
     std::cout << "Error initializing GLEW." << std::endl;
     return 1;
@@ -855,21 +861,17 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
       "Warning: Unable to set VSync: " << SDL_GetError() << std::endl;
     return 1;
   }
-  auto running = true;
-  auto event = SDL_Event();
-  auto gl_context = SDL_GL_GetCurrentContext();
-  auto windowId = SDL_GetWindowID(window);
   auto accelerator = Accelerator();
-  glViewport(0, 0, 1920, 1080);
+  glViewport(0, 0, width, height);
   glMatrixMode(GL_PROJECTION);
   glLoadIdentity();
-  glOrtho(0.0, 1920, 1080, 0.0, 1.0, -1.0);
+  glOrtho(0.0, width, height, 0.0, 1.0, -1.0);
   glMatrixMode(GL_MODELVIEW);
   glLoadIdentity();
   glEnable(GL_TEXTURE_2D);
-  auto textureId = make_shader();
+  auto texture_id = make_shader(width, height);
   auto texture =
-    compute::opengl_texture(accelerator.m_context, GL_TEXTURE_2D, 0, textureId,
+    compute::opengl_texture(accelerator.m_context, GL_TEXTURE_2D, 0, texture_id,
       compute::opengl_texture::mem_flags::write_only);
   glClear(GL_COLOR_BUFFER_BIT);
   glLoadIdentity();
@@ -881,11 +883,14 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
   camera.set_position(Point(9.5f, 9.5f, -10));
   camera.set_direction(Vector(0, 0, 1));
   camera.set_orientation(Vector(0, 1, 0));
+  auto running = true;
+  auto event = SDL_Event();
+  auto window_id = SDL_GetWindowID(window);
   while(running) {
     if(SDL_PollEvent(&event)) {
       switch(event.type) {
         case SDL_WINDOWEVENT:
-          if(event.window.windowID == windowId)  {
+          if(event.window.windowID == window_id) {
             switch(event.window.event) {
               case SDL_WINDOWEVENT_CLOSE:
                 event.type = SDL_QUIT;
@@ -899,23 +904,25 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
           break;
       }
     }
-    render_gpu(scene, accelerator, texture, 1920, 1080, camera);
-    glBindTexture(GL_TEXTURE_2D, textureId);
+//    render_cpu(scene, accelerator, texture, texture_id, width, height, camera);
+    render_gpu(scene, accelerator, texture, width, height, camera);
+    glBindTexture(GL_TEXTURE_2D, texture_id);
     glBegin(GL_QUADS);
     glTexCoord2f(0.f, 0.f);
     glVertex2f(0.f, 0.f);
     glTexCoord2f(1.f, 0.f);
-    glVertex2f(1920.f, 0.f);
+    glVertex2f(static_cast<float>(width), 0.f);
     glTexCoord2f(1.f, 1.f);
-    glVertex2f(1920.f, 1080.f);
+    glVertex2f(static_cast<float>(width), static_cast<float>(height));
     glTexCoord2f(0.f, 1.f);
-    glVertex2f(0.f, 1080.f);
+    glVertex2f(0.f, static_cast<float>(height));
     glEnd();
     SDL_GL_SwapWindow(window);
     glBindTexture(GL_TEXTURE_2D, 0);
   }
   SDL_DestroyWindow(window);
-  SDL_GL_DeleteContext(glContext);
+  SDL_GL_DeleteContext(gl_context);
+  glDeleteTextures(1, &texture_id);
   SDL_Quit();
   return 0;
 }
