@@ -733,12 +733,12 @@ void intersect(const Scene& scene, compute::opengl_texture& texture, int width,
         }
 
         __kernel void intersect(__global Voxel* points, int scene_width,
-            int scene_height, int scene_depth, __global Color* pixels,
-            int width, int height, Point camera, Vector top_left,
-            Vector x_shift, Vector y_shift) {
-          int i = get_global_id(0);
-          int x = i % width;
-          int y = i / width;
+            int scene_height, int scene_depth, __write_only image2d_t pixels,
+            Point camera, Vector top_left, Vector x_shift, Vector y_shift) {
+          int x = get_global_id(0);
+          int y = get_global_id(1);
+          int width = get_global_size(0);
+          int height = get_global_size(1);
           Scene scene;
           scene.m_width = scene_width;
           scene.m_height = scene_height;
@@ -750,11 +750,14 @@ void intersect(const Scene& scene, compute::opengl_texture& texture, int width,
           ray.m_point = add_point_vector(camera, direction);
           ray.m_direction = norm(direction);
           Voxel voxel = trace(scene, ray);
+          write_imagef(pixels, (x, y), (1.f, 0, 0, 1.f));
+/*
           if(is_none_voxel(voxel)) {
-            pixels[i] = make_color(0, 0, 0, 0);
+            write_imageui(pixels, (x, y), (0, 0, 0, 0));
           } else {
-            pixels[i] = voxel.m_color;
+            write_imageui(pixels, (x, y), (255, 0, 0, 255));
           }
+*/
         });
     auto cache =
       compute::program_cache::get_global_cache(accelerator.m_context);
@@ -781,19 +784,18 @@ void intersect(const Scene& scene, compute::opengl_texture& texture, int width,
     kernel.set_arg(2, SIZE);
     kernel.set_arg(3, SIZE);
     kernel.set_arg(4, texture);
-    kernel.set_arg(5, width);
-    kernel.set_arg(6, height);
-    kernel.set_arg(7, sizeof(Point), &camera);
-    kernel.set_arg(8, sizeof(Vector), &top_left);
-    kernel.set_arg(9, sizeof(Vector), &x_shift);
-    kernel.set_arg(10, sizeof(Vector), &y_shift);
+    kernel.set_arg(5, sizeof(Point), &camera);
+    kernel.set_arg(6, sizeof(Vector), &top_left);
+    kernel.set_arg(7, sizeof(Vector), &x_shift);
+    kernel.set_arg(8, sizeof(Vector), &y_shift);
     glFinish();
     compute::opengl_enqueue_acquire_gl_objects(1, &texture.get(),
       accelerator.m_queue);
-    accelerator.m_queue.enqueue_1d_range_kernel(kernel, 0, 1920 * 1080, 0);
-    accelerator.m_queue.finish();
+    accelerator.m_queue.enqueue_nd_range_kernel(kernel, compute::dim(0, 0),
+      compute::dim(1920, 1080), compute::dim(1, 1));
     compute::opengl_enqueue_release_gl_objects(1, &texture.get(),
       accelerator.m_queue);
+    accelerator.m_queue.finish();
   });
 }
 
@@ -863,12 +865,12 @@ auto make_shader() {
   auto textureId = GLuint();
   glGenTextures(1, &textureId);
   glBindTexture(GL_TEXTURE_2D, textureId);
-  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, 1920, 1080, 0, GL_RGBA,
-    GL_UNSIGNED_BYTE, nullptr);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 1920, 1080, 0, GL_RGBA,
+    GL_UNSIGNED_BYTE, nullptr);
   glBindTexture(GL_TEXTURE_2D, 0);
   return textureId;
 }
@@ -913,10 +915,11 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
   auto texture =
     compute::opengl_texture(accelerator.m_context, GL_TEXTURE_2D, 0, textureId,
       compute::opengl_texture::mem_flags::write_only);
-  demo_gpu(accelerator, texture);
   glClear(GL_COLOR_BUFFER_BIT);
   glLoadIdentity();
   glTranslatef(0.f, 0.f, 0.f);
+  demo_gpu(accelerator, texture);
+  glEnable(GL_TEXTURE_2D);
   glBindTexture(GL_TEXTURE_2D, textureId);
   glBegin(GL_QUADS);
   glTexCoord2f(0.f, 0.f);
