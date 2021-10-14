@@ -750,14 +750,13 @@ void intersect(const Scene& scene, compute::opengl_texture& texture, int width,
           ray.m_point = add_point_vector(camera, direction);
           ray.m_direction = norm(direction);
           Voxel voxel = trace(scene, ray);
-          write_imagef(pixels, (x, y), (1.f, 0, 0, 1.f));
-/*
           if(is_none_voxel(voxel)) {
-            write_imageui(pixels, (x, y), (0, 0, 0, 0));
+            write_imagef(pixels, (int2)(x, y), (float4)(0.f, 0.f, 0.f, 0.f));
           } else {
-            write_imageui(pixels, (x, y), (255, 0, 0, 255));
+            write_imagef(pixels, (int2)(x, y), (float4)(
+              voxel.m_color.m_red / 255.f, voxel.m_color.m_green / 255.f,
+              voxel.m_color.m_blue / 255.f, voxel.m_color.m_alpha / 255.f));
           }
-*/
         });
     auto cache =
       compute::program_cache::get_global_cache(accelerator.m_context);
@@ -774,7 +773,8 @@ void intersect(const Scene& scene, compute::opengl_texture& texture, int width,
       for(auto y = 0; y < SIZE; ++y) {
         for(auto z = 0; z < SIZE; ++z) {
           host[x + SIZE * (y + SIZE * z)] = scene.get(Point(
-            static_cast<float>(x), static_cast<float>(y), static_cast<float>(z)));
+            static_cast<float>(x), static_cast<float>(y),
+            static_cast<float>(z)));
         }
       }
     }
@@ -919,7 +919,6 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
   glLoadIdentity();
   glTranslatef(0.f, 0.f, 0.f);
   demo_gpu(accelerator, texture);
-  glEnable(GL_TEXTURE_2D);
   glBindTexture(GL_TEXTURE_2D, textureId);
   glBegin(GL_QUADS);
   glTexCoord2f(0.f, 0.f);
