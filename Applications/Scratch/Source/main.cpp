@@ -23,25 +23,6 @@ struct Accelerator {
       m_queue(m_context, m_context.get_device()) {}
 };
 
-template<typename F>
-auto profile(F&& f) {
-  auto start = std::chrono::high_resolution_clock::now();
-  if constexpr(std::is_same_v<decltype(f()), void>) {
-    std::forward<F>(f)();
-    auto end = std::chrono::high_resolution_clock::now();
-    std::cout <<
-      std::chrono::duration_cast<std::chrono::duration<double>>(end - start) <<
-      std::endl;
-  } else {
-    auto result = std::forward<F>(f)();
-    auto end = std::chrono::high_resolution_clock::now();
-    std::cout <<
-      std::chrono::duration_cast<std::chrono::duration<double>>(end - start) <<
-      std::endl;
-    return result;
-  }
-}
-
 struct Color {
   std::uint8_t m_red;
   std::uint8_t m_green;
@@ -768,35 +749,33 @@ void intersect(const Scene& scene, compute::opengl_texture& texture, int width,
   auto host = std::vector<Voxel>();
   host.resize(SIZE * SIZE * SIZE, Voxel::NONE());
   auto s = compute::vector<Voxel>(SIZE * SIZE * SIZE, accelerator.m_context);
-  profile([&] {
-    for(auto x = 0; x < SIZE; ++x) {
-      for(auto y = 0; y < SIZE; ++y) {
-        for(auto z = 0; z < SIZE; ++z) {
-          host[x + SIZE * (y + SIZE * z)] = scene.get(Point(
-            static_cast<float>(x), static_cast<float>(y),
-            static_cast<float>(z)));
-        }
+  for(auto x = 0; x < SIZE; ++x) {
+    for(auto y = 0; y < SIZE; ++y) {
+      for(auto z = 0; z < SIZE; ++z) {
+        host[x + SIZE * (y + SIZE * z)] = scene.get(Point(
+          static_cast<float>(x), static_cast<float>(y),
+          static_cast<float>(z)));
       }
     }
-    compute::copy(host.begin(), host.end(), s.begin(), accelerator.m_queue);
-    kernel.set_arg(0, s.get_buffer());
-    kernel.set_arg(1, SIZE);
-    kernel.set_arg(2, SIZE);
-    kernel.set_arg(3, SIZE);
-    kernel.set_arg(4, texture);
-    kernel.set_arg(5, sizeof(Point), &camera);
-    kernel.set_arg(6, sizeof(Vector), &top_left);
-    kernel.set_arg(7, sizeof(Vector), &x_shift);
-    kernel.set_arg(8, sizeof(Vector), &y_shift);
-    glFinish();
-    compute::opengl_enqueue_acquire_gl_objects(1, &texture.get(),
-      accelerator.m_queue);
-    accelerator.m_queue.enqueue_nd_range_kernel(kernel, compute::dim(0, 0),
-      compute::dim(1920, 1080), compute::dim(1, 1));
-    compute::opengl_enqueue_release_gl_objects(1, &texture.get(),
-      accelerator.m_queue);
-    accelerator.m_queue.finish();
-  });
+  }
+  compute::copy(host.begin(), host.end(), s.begin(), accelerator.m_queue);
+  kernel.set_arg(0, s.get_buffer());
+  kernel.set_arg(1, SIZE);
+  kernel.set_arg(2, SIZE);
+  kernel.set_arg(3, SIZE);
+  kernel.set_arg(4, texture);
+  kernel.set_arg(5, sizeof(Point), &camera);
+  kernel.set_arg(6, sizeof(Vector), &top_left);
+  kernel.set_arg(7, sizeof(Vector), &x_shift);
+  kernel.set_arg(8, sizeof(Vector), &y_shift);
+  glFinish();
+  compute::opengl_enqueue_acquire_gl_objects(1, &texture.get(),
+    accelerator.m_queue);
+  accelerator.m_queue.enqueue_nd_range_kernel(kernel, compute::dim(0, 0),
+    compute::dim(1920, 1080), compute::dim(1, 1));
+  compute::opengl_enqueue_release_gl_objects(1, &texture.get(),
+    accelerator.m_queue);
+  accelerator.m_queue.finish();
 }
 
 void render_gpu(const Scene& scene, Accelerator& accelerator,
@@ -812,8 +791,9 @@ void render_gpu(const Scene& scene, Accelerator& accelerator,
     x_shift, y_shift, accelerator);
 }
 
-std::vector<Color> render_cpu(
-    const Scene& scene, int width, int height, const Camera& camera) {
+std::vector<Color> render_cpu(const Scene& scene, Accelerator& accelerator,
+    compute::opengl_texture& texture, int width, int height,
+    const Camera& camera) {
   auto aspect_ratio = static_cast<float>(height) / width;
   auto roll = cross(camera.get_orientation(), camera.get_direction());
   auto top_left =
@@ -822,43 +802,19 @@ std::vector<Color> render_cpu(
   auto y_shift = (2.f * aspect_ratio / height) * camera.get_orientation();
   auto pixels = std::vector<Color>();
   pixels.reserve(width * height);
-  profile([&] {
-    for(auto y = 0; y < height; ++y) {
-      for(auto x = 0; x < width; ++x) {
-        auto direction = top_left + x * x_shift - y * y_shift;
-        auto point = camera.get_position() + direction;
-        auto voxel = scene.intersect(point, normalize(direction));
-        if(voxel == Voxel::NONE()) {
-          pixels.push_back(Color(0, 0, 0));
-        } else {
-          pixels.push_back(voxel.m_color);
-        }
+  for(auto y = 0; y < height; ++y) {
+    for(auto x = 0; x < width; ++x) {
+      auto direction = top_left + x * x_shift - y * y_shift;
+      auto point = camera.get_position() + direction;
+      auto voxel = scene.intersect(point, normalize(direction));
+      if(voxel == Voxel::NONE()) {
+        pixels.push_back(Color(0, 0, 0));
+      } else {
+        pixels.push_back(voxel.m_color);
       }
     }
-  });
+  }
   return pixels;
-}
-
-void demo_gpu(Accelerator& accelerator, compute::opengl_texture& texture) {
-  auto scene = Scene();
-  auto shape = std::make_shared<Sphere>(10, Color(255, 0, 0, 0));
-  scene.add(shape);
-  auto camera = Camera();
-  camera.set_position(Point(9.5f, 9.5f, -10));
-  camera.set_direction(Vector(0, 0, 1));
-  camera.set_orientation(Vector(0, 1, 0));
-  render_gpu(scene, accelerator, texture, 1920, 1080, camera);
-}
-
-void demo_cpu() {
-  auto scene = Scene();
-  auto shape = std::make_shared<Sphere>(10, Color(255, 0, 0, 0));
-  scene.add(shape);
-  auto camera = Camera();
-  camera.set_position(Point(9.5f, 9.5f, -10));
-  camera.set_direction(Vector(0, 0, 1));
-  camera.set_orientation(Vector(0, 1, 0));
-  auto pixels = render_cpu(scene, 1920, 1080, camera);
 }
 
 auto make_shader() {
@@ -867,8 +823,8 @@ auto make_shader() {
   glBindTexture(GL_TEXTURE_2D, textureId);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
   glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 1920, 1080, 0, GL_RGBA,
     GL_UNSIGNED_BYTE, nullptr);
   glBindTexture(GL_TEXTURE_2D, 0);
@@ -918,19 +874,13 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
   glClear(GL_COLOR_BUFFER_BIT);
   glLoadIdentity();
   glTranslatef(0.f, 0.f, 0.f);
-  demo_gpu(accelerator, texture);
-  glBindTexture(GL_TEXTURE_2D, textureId);
-  glBegin(GL_QUADS);
-  glTexCoord2f(0.f, 0.f);
-  glVertex2f(0.f, 0.f);
-  glTexCoord2f(1.f, 0.f);
-  glVertex2f(1920.f, 0.f);
-  glTexCoord2f(1.f, 1.f);
-  glVertex2f(1920.f, 1080.f);
-  glTexCoord2f(0.f, 1.f);
-  glVertex2f(0.f, 1080.f);
-  glEnd();
-  SDL_GL_SwapWindow(window);
+  auto scene = Scene();
+  auto shape = std::make_shared<Sphere>(10, Color(255, 0, 0, 0));
+  scene.add(shape);
+  auto camera = Camera();
+  camera.set_position(Point(9.5f, 9.5f, -10));
+  camera.set_direction(Vector(0, 0, 1));
+  camera.set_orientation(Vector(0, 1, 0));
   while(running) {
     if(SDL_PollEvent(&event)) {
       switch(event.type) {
@@ -949,6 +899,20 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
           break;
       }
     }
+    render_gpu(scene, accelerator, texture, 1920, 1080, camera);
+    glBindTexture(GL_TEXTURE_2D, textureId);
+    glBegin(GL_QUADS);
+    glTexCoord2f(0.f, 0.f);
+    glVertex2f(0.f, 0.f);
+    glTexCoord2f(1.f, 0.f);
+    glVertex2f(1920.f, 0.f);
+    glTexCoord2f(1.f, 1.f);
+    glVertex2f(1920.f, 1080.f);
+    glTexCoord2f(0.f, 1.f);
+    glVertex2f(0.f, 1080.f);
+    glEnd();
+    SDL_GL_SwapWindow(window);
+    glBindTexture(GL_TEXTURE_2D, 0);
   }
   SDL_DestroyWindow(window);
   SDL_GL_DeleteContext(glContext);
