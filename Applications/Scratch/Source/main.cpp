@@ -2,16 +2,11 @@
 #include <chrono>
 #include <cstdint>
 #include <iostream>
-#include <stdio.h>
 #include <vector>
 #include <GL/glew.h>
 #include <SDL.h>
-#include <SDL_opengl.h>
-#undef main
-#include <GL/GL.h>
-#include <GL/GLU.h>
-#include <Windows.h>
 #include <boost/compute.hpp>
+#include <Windows.h>
 #include <boost/compute/interop/opengl/context.hpp>
 #include "Version.hpp"
 
@@ -28,102 +23,21 @@ struct Accelerator {
 
 template<typename F>
 auto profile(F&& f) {
-  auto s = std::chrono::high_resolution_clock::now();
+  auto start = std::chrono::high_resolution_clock::now();
   if constexpr(std::is_same_v<decltype(f()), void>) {
     std::forward<F>(f)();
-    auto e = std::chrono::high_resolution_clock::now();
-    std::cout << std::chrono::duration_cast<std::chrono::duration<double>>(e - s) << std::endl;
+    auto end = std::chrono::high_resolution_clock::now();
+    std::cout <<
+      std::chrono::duration_cast<std::chrono::duration<double>>(end - start) <<
+      std::endl;
   } else {
-    auto r = std::forward<F>(f)();
-    auto e = std::chrono::high_resolution_clock::now();
-    std::cout << std::chrono::duration_cast<std::chrono::duration<double>>(e - s) << std::endl;
-    return r;
+    auto result = std::forward<F>(f)();
+    auto end = std::chrono::high_resolution_clock::now();
+    std::cout <<
+      std::chrono::duration_cast<std::chrono::duration<double>>(end - start) <<
+      std::endl;
+    return result;
   }
-}
-
-namespace {
-const int BYTES_PER_PIXEL = 3; /// red, green, & blue
-const int FILE_HEADER_SIZE = 14;
-const int INFO_HEADER_SIZE = 40;
-
-unsigned char* createBitmapInfoHeader (int height, int width)
-{
-    static unsigned char infoHeader[] = {
-        0,0,0,0, /// header size
-        0,0,0,0, /// image width
-        0,0,0,0, /// image height
-        0,0,     /// number of color planes
-        0,0,     /// bits per pixel
-        0,0,0,0, /// compression
-        0,0,0,0, /// image size
-        0,0,0,0, /// horizontal resolution
-        0,0,0,0, /// vertical resolution
-        0,0,0,0, /// colors in color table
-        0,0,0,0, /// important color count
-    };
-
-    infoHeader[ 0] = (unsigned char)(INFO_HEADER_SIZE);
-    infoHeader[ 4] = (unsigned char)(width      );
-    infoHeader[ 5] = (unsigned char)(width >>  8);
-    infoHeader[ 6] = (unsigned char)(width >> 16);
-    infoHeader[ 7] = (unsigned char)(width >> 24);
-    infoHeader[ 8] = (unsigned char)(height      );
-    infoHeader[ 9] = (unsigned char)(height >>  8);
-    infoHeader[10] = (unsigned char)(height >> 16);
-    infoHeader[11] = (unsigned char)(height >> 24);
-    infoHeader[12] = (unsigned char)(1);
-    infoHeader[14] = (unsigned char)(BYTES_PER_PIXEL*8);
-
-    return infoHeader;
-}
-
-unsigned char* createBitmapFileHeader (int height, int stride)
-{
-    int fileSize = FILE_HEADER_SIZE + INFO_HEADER_SIZE + (stride * height);
-
-    static unsigned char fileHeader[] = {
-        0,0,     /// signature
-        0,0,0,0, /// image file size in bytes
-        0,0,0,0, /// reserved
-        0,0,0,0, /// start of pixel array
-    };
-
-    fileHeader[ 0] = (unsigned char)('B');
-    fileHeader[ 1] = (unsigned char)('M');
-    fileHeader[ 2] = (unsigned char)(fileSize      );
-    fileHeader[ 3] = (unsigned char)(fileSize >>  8);
-    fileHeader[ 4] = (unsigned char)(fileSize >> 16);
-    fileHeader[ 5] = (unsigned char)(fileSize >> 24);
-    fileHeader[10] = (unsigned char)(FILE_HEADER_SIZE + INFO_HEADER_SIZE);
-
-    return fileHeader;
-}
-
-void generateBitmapImage (const unsigned char* image, int height, int width, const char* imageFileName)
-{
-    int widthInBytes = width * BYTES_PER_PIXEL;
-
-    unsigned char padding[3] = {0, 0, 0};
-    int paddingSize = (4 - (widthInBytes) % 4) % 4;
-
-    int stride = (widthInBytes) + paddingSize;
-
-    FILE* imageFile = fopen(imageFileName, "wb");
-
-    unsigned char* fileHeader = createBitmapFileHeader(height, stride);
-    fwrite(fileHeader, 1, FILE_HEADER_SIZE, imageFile);
-
-    unsigned char* infoHeader = createBitmapInfoHeader(height, width);
-    fwrite(infoHeader, 1, INFO_HEADER_SIZE, imageFile);
-
-    int i;
-    for (i = 0; i < height; i++) {
-        fwrite(image + (i*widthInBytes), BYTES_PER_PIXEL, width, imageFile);
-        fwrite(padding, 1, paddingSize, imageFile);
-    }
-
-    fclose(imageFile);
-}
 }
 
 struct Color {
@@ -136,9 +50,9 @@ struct Color {
 };
 
 std::ostream& operator <<(std::ostream& out, Color color) {
-  return out << "Color(" << static_cast<int>(color.m_red) << ' ' <<
-    static_cast<int>(color.m_green) << ' ' << static_cast<int>(color.m_blue) <<
-    ' ' << static_cast<int>(color.m_alpha) << ')';
+  return out << "Color(" << static_cast<int>(color.m_red) << ", " <<
+    static_cast<int>(color.m_green) << ", " << static_cast<int>(color.m_blue) <<
+    ", " << static_cast<int>(color.m_alpha) << ')';
 }
 
 struct Point {
@@ -151,7 +65,7 @@ struct Point {
 
 std::ostream& operator <<(std::ostream& out, Point point) {
   return out <<
-    "Point(" << point.m_x << ' ' << point.m_y << ' ' << point.m_z << ')';
+    "Point(" << point.m_x << ", " << point.m_y << ", " << point.m_z << ')';
 }
 
 struct Voxel {
@@ -177,7 +91,7 @@ struct Vector {
 
 std::ostream& operator <<(std::ostream& out, Vector vector) {
   return out <<
-    "Vector(" << vector.m_x << ' ' << vector.m_y << ' ' << vector.m_z << ')';
+    "Vector(" << vector.m_x << ", " << vector.m_y << ", " << vector.m_z << ')';
 }
 
 Vector operator -(Vector vector) {
@@ -922,21 +836,6 @@ std::vector<Color> render_cpu(
   return pixels;
 }
 
-void save_bmp(const std::vector<Color>& pixels, std::string path) {
-  constexpr int width = 1920;
-  constexpr int height = 1080;
-  auto image = new unsigned char[height][width][BYTES_PER_PIXEL];
-  for(auto i = 0; i < height; ++i) {
-    for(auto j = 0; j < width; ++j) {
-      auto& color = pixels[j + width * i];
-      image[height - i - 1][j][2] = color.m_red;
-      image[height - i - 1][j][1] = color.m_green;
-      image[height - i - 1][j][0] = color.m_blue;
-    }
-  }
-  generateBitmapImage((unsigned char*) image, height, width, path.c_str());
-}
-
 void demo_gpu(Accelerator& accelerator) {
   auto scene = Scene();
   auto shape = std::make_shared<Sphere>(10, Color(255, 0, 0, 0));
@@ -946,7 +845,6 @@ void demo_gpu(Accelerator& accelerator) {
   camera.set_direction(Vector(0, 0, 1));
   camera.set_orientation(Vector(0, 1, 0));
   auto pixels = render_gpu(scene, accelerator, 1920, 1080, camera);
-  save_bmp(pixels, "gpu.bmp");
 }
 
 void demo_cpu() {
@@ -958,74 +856,28 @@ void demo_cpu() {
   camera.set_direction(Vector(0, 0, 1));
   camera.set_orientation(Vector(0, 1, 0));
   auto pixels = render_cpu(scene, 1920, 1080, camera);
-  save_bmp(pixels, "cpu.bmp");
 }
 
 auto make_shader() {
-  auto programId = glCreateProgram();
-  auto vertexShader = glCreateShader(GL_VERTEX_SHADER);
-  auto vertexShaderSource = BOOST_COMPUTE_STRINGIZE_SOURCE(
-    #version 140\n
-    in vec2 LVertexPos2D;
-    void main() {
-      gl_Position = vec4(LVertexPos2D.x, LVertexPos2D.y, 0, 1);
-    });
-  glShaderSource(vertexShader, 1, &vertexShaderSource, nullptr);
-  glCompileShader(vertexShader);
-  auto shaderCompiled = GL_FALSE;
-  glGetShaderiv(vertexShader, GL_COMPILE_STATUS, &shaderCompiled);
-  if(shaderCompiled != GL_TRUE) {
-    printf( "Unable to compile vertex shader %d!\n", vertexShader );
-    throw std::exception();
+  auto textureId = GLuint();
+  glGenTextures(1, &textureId);
+  glBindTexture(GL_TEXTURE_2D, textureId);
+  auto pixels = std::vector<Color>();
+  for(auto y = 0; y < 1080; ++y) {
+    for(auto x = 0; x < 1920; ++x) {
+      if(x == y) {
+        pixels.push_back(Color(0, 255, 0, 255));
+      } else {
+        pixels.push_back(Color(255, 0, 0, 255));
+      }
+    }
   }
-  glAttachShader(programId, vertexShader);
-  auto fragmentShader = glCreateShader(GL_FRAGMENT_SHADER);
-  auto fragmentShaderSource = BOOST_COMPUTE_STRINGIZE_SOURCE(
-    #version 140\n
-    out vec4 LFragment;
-    void main() {
-      LFragment = vec4( 1.0, 1.0, 1.0, 1.0 );
-    });
-  glShaderSource(fragmentShader, 1, &fragmentShaderSource, nullptr);
-  glCompileShader(fragmentShader);
-  auto fShaderCompiled = GL_FALSE;
-  glGetShaderiv(fragmentShader, GL_COMPILE_STATUS, &fShaderCompiled);
-  if(fShaderCompiled != GL_TRUE) {
-    printf( "Unable to compile fragment shader %d!\n", fragmentShader );
-    throw std::exception();
-  }
-  glAttachShader(programId, fragmentShader);
-  glLinkProgram(programId);
-  auto programSuccess = GL_TRUE;
-  glGetProgramiv(programId, GL_LINK_STATUS, &programSuccess);
-  if(programSuccess != GL_TRUE) {
-    printf("Error linking program %d!\n", programId);
-    throw std::exception();
-  }
-  auto vertexPos2DLocation = glGetAttribLocation(programId, "LVertexPos2D");
-  if(vertexPos2DLocation == -1) {
-    printf( "LVertexPos2D is not a valid glsl program variable!\n" );
-    throw std::exception();
-  }
-  glClearColor(0.f, 0.f, 0.f, 1.f);
-  GLfloat vertexData[] = {
-    -0.5f, -0.5f,
-     0.5f, -0.5f,
-     0.5f,  0.5f,
-    -0.5f,  0.5f
-  };
-  GLuint indexData[] = { 0, 1, 2, 3 };
-  auto vbo = GLuint();
-  auto ibo = GLuint();
-  glGenBuffers(1, &vbo);
-  glBindBuffer(GL_ARRAY_BUFFER, vbo);
-  glBufferData(GL_ARRAY_BUFFER, 2 * 4 * sizeof(GLfloat), vertexData,
-    GL_STATIC_DRAW);
-  glGenBuffers(1, &ibo);
-  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibo);
-  glBufferData(GL_ELEMENT_ARRAY_BUFFER, 4 * sizeof(GLuint), indexData,
-    GL_STATIC_DRAW);
-  return std::tuple(programId, vbo, ibo, vertexPos2DLocation);
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 1920, 1080, 0, GL_RGBA,
+    GL_UNSIGNED_BYTE, pixels.data());
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+  glBindTexture(GL_TEXTURE_2D, 0);
+  return textureId;
 }
 
 int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
@@ -1050,6 +902,7 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
   if(SDL_GL_SetSwapInterval(1) < 0) {
     std::cout <<
       "Warning: Unable to set VSync: " << SDL_GetError() << std::endl;
+    return 1;
   }
   auto running = true;
   auto event = SDL_Event();
@@ -1057,18 +910,29 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
   auto windowId = SDL_GetWindowID(window);
   auto accelerator = Accelerator();
 //  render_gpu();
-  auto [programId, vbo, ibo, vertexPos2DLocation] = make_shader();
-    glClear(GL_COLOR_BUFFER_BIT);
-    glUseProgram(programId);
-    glEnableVertexAttribArray(vertexPos2DLocation);
-    glBindBuffer(GL_ARRAY_BUFFER, vbo);
-    glVertexAttribPointer(
-      vertexPos2DLocation, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(GLfloat), nullptr);
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibo);
-    glDrawElements(GL_TRIANGLE_FAN, 4, GL_UNSIGNED_INT, NULL);
-    glDisableVertexAttribArray(vertexPos2DLocation);
-    glUseProgram(0);
-    SDL_GL_SwapWindow(window);
+  glViewport(0, 0, 1920, 1080);
+  glMatrixMode(GL_PROJECTION);
+  glLoadIdentity();
+  glOrtho(0.0, 1920, 1080, 0.0, 1.0, -1.0);
+  glMatrixMode(GL_MODELVIEW);
+  glLoadIdentity();
+  glEnable(GL_TEXTURE_2D);
+  auto textureId = make_shader();
+  glClear(GL_COLOR_BUFFER_BIT);
+  glLoadIdentity();
+  glTranslatef(0.f, 0.f, 0.f );
+  glBindTexture(GL_TEXTURE_2D, textureId);
+  glBegin(GL_QUADS);
+  glTexCoord2f(0.f, 0.f);
+  glVertex2f(0.f, 0.f);
+  glTexCoord2f(1.f, 0.f);
+  glVertex2f(1920.f, 0.f);
+  glTexCoord2f(1.f, 1.f);
+  glVertex2f(1920.f, 1080.f);
+  glTexCoord2f(0.f, 1.f);
+  glVertex2f(0.f, 1080.f);
+  glEnd();
+  SDL_GL_SwapWindow(window);
   while(running) {
     if(SDL_PollEvent(&event)) {
       switch(event.type) {
