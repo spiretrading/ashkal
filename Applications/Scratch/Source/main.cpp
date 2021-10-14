@@ -7,7 +7,9 @@
 #include <SDL.h>
 #include <boost/compute.hpp>
 #include <Windows.h>
+#include <boost/compute/interop/opengl/acquire.hpp>
 #include <boost/compute/interop/opengl/context.hpp>
+#include <boost/compute/interop/opengl/opengl_texture.hpp>
 #include "Version.hpp"
 
 using namespace boost;
@@ -529,9 +531,9 @@ BOOST_COMPUTE_ADAPT_STRUCT(Point, Point, (m_x, m_y, m_z));
 BOOST_COMPUTE_ADAPT_STRUCT(Vector, Vector, (m_x, m_y, m_z));
 BOOST_COMPUTE_ADAPT_STRUCT(Ray, Ray, (m_point, m_direction));
 
-void intersect(const Scene& scene, compute::vector<Color>& pixels,
-    int width, int height, Point camera, Vector top_left, Vector x_shift,
-    Vector y_shift, Accelerator& accelerator) {
+void intersect(const Scene& scene, compute::opengl_texture& texture, int width,
+    int height, Point camera, Vector top_left, Vector x_shift, Vector y_shift,
+    Accelerator& accelerator) {
   static auto kernel = [&] {
     static auto source = compute::type_definition<Color>() +
       compute::type_definition<Voxel>() +
@@ -764,6 +766,7 @@ void intersect(const Scene& scene, compute::vector<Color>& pixels,
   auto host = std::vector<Voxel>();
   host.resize(SIZE * SIZE * SIZE, Voxel::NONE());
   auto s = compute::vector<Voxel>(SIZE * SIZE * SIZE, accelerator.m_context);
+  glFinish();
   profile([&] {
     for(auto x = 0; x < SIZE; ++x) {
       for(auto y = 0; y < SIZE; ++y) {
@@ -774,39 +777,37 @@ void intersect(const Scene& scene, compute::vector<Color>& pixels,
       }
     }
     compute::copy(host.begin(), host.end(), s.begin(), accelerator.m_queue);
+    compute::opengl_enqueue_acquire_gl_objects(1, &texture.get(),
+      accelerator.m_queue);
     kernel.set_arg(0, s.get_buffer());
     kernel.set_arg(1, SIZE);
     kernel.set_arg(2, SIZE);
     kernel.set_arg(3, SIZE);
-    kernel.set_arg(4, pixels.get_buffer());
+    kernel.set_arg(4, texture);
     kernel.set_arg(5, width);
     kernel.set_arg(6, height);
     kernel.set_arg(7, sizeof(Point), &camera);
     kernel.set_arg(8, sizeof(Vector), &top_left);
     kernel.set_arg(9, sizeof(Vector), &x_shift);
     kernel.set_arg(10, sizeof(Vector), &y_shift);
-    accelerator.m_queue.enqueue_1d_range_kernel(kernel, 0, pixels.size(), 0);
+    accelerator.m_queue.enqueue_1d_range_kernel(kernel, 0, 1920 * 1080, 0);
     accelerator.m_queue.finish();
+    compute::opengl_enqueue_release_gl_objects(1, &texture.get(),
+      accelerator.m_queue);
   });
 }
 
-std::vector<Color> render_gpu(const Scene& scene, Accelerator& accelerator,
-    int width, int height, const Camera& camera) {
+void render_gpu(const Scene& scene, Accelerator& accelerator,
+    compute::opengl_texture& texture, int width, int height,
+    const Camera& camera) {
   auto aspect_ratio = static_cast<float>(height) / width;
   auto roll = cross(camera.get_orientation(), camera.get_direction());
   auto top_left =
     camera.get_direction() - roll + aspect_ratio * camera.get_orientation();
   auto x_shift = (2.f / width) * roll;
   auto y_shift = (2.f * aspect_ratio / height) * camera.get_orientation();
-  auto device_pixels =
-    compute::vector<Color>(width * height, accelerator.m_context);
-  intersect(scene, device_pixels, width, height, camera.get_position(),
-    top_left, x_shift, y_shift, accelerator);
-  auto pixels = std::vector<Color>();
-  pixels.resize(width * height);
-  compute::copy(device_pixels.begin(), device_pixels.end(), pixels.begin(),
-    accelerator.m_queue);
-  return pixels;
+  intersect(scene, texture, width, height, camera.get_position(), top_left,
+    x_shift, y_shift, accelerator);
 }
 
 std::vector<Color> render_cpu(
@@ -836,7 +837,7 @@ std::vector<Color> render_cpu(
   return pixels;
 }
 
-void demo_gpu(Accelerator& accelerator) {
+void demo_gpu(Accelerator& accelerator, compute::opengl_texture& texture) {
   auto scene = Scene();
   auto shape = std::make_shared<Sphere>(10, Color(255, 0, 0, 0));
   scene.add(shape);
@@ -844,7 +845,7 @@ void demo_gpu(Accelerator& accelerator) {
   camera.set_position(Point(9.5f, 9.5f, -10));
   camera.set_direction(Vector(0, 0, 1));
   camera.set_orientation(Vector(0, 1, 0));
-  auto pixels = render_gpu(scene, accelerator, 1920, 1080, camera);
+  render_gpu(scene, accelerator, texture, 1920, 1080, camera);
 }
 
 void demo_cpu() {
@@ -862,20 +863,10 @@ auto make_shader() {
   auto textureId = GLuint();
   glGenTextures(1, &textureId);
   glBindTexture(GL_TEXTURE_2D, textureId);
-  auto pixels = std::vector<Color>();
-  for(auto y = 0; y < 1080; ++y) {
-    for(auto x = 0; x < 1920; ++x) {
-      if(x == y) {
-        pixels.push_back(Color(0, 255, 0, 255));
-      } else {
-        pixels.push_back(Color(255, 0, 0, 255));
-      }
-    }
-  }
-  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 1920, 1080, 0, GL_RGBA,
-    GL_UNSIGNED_BYTE, pixels.data());
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, 1920, 1080, 0, GL_RGBA,
+    GL_UNSIGNED_BYTE, nullptr);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
   glBindTexture(GL_TEXTURE_2D, 0);
   return textureId;
 }
@@ -909,7 +900,6 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
   auto gl_context = SDL_GL_GetCurrentContext();
   auto windowId = SDL_GetWindowID(window);
   auto accelerator = Accelerator();
-//  render_gpu();
   glViewport(0, 0, 1920, 1080);
   glMatrixMode(GL_PROJECTION);
   glLoadIdentity();
@@ -918,9 +908,13 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
   glLoadIdentity();
   glEnable(GL_TEXTURE_2D);
   auto textureId = make_shader();
+  auto texture =
+    compute::opengl_texture(accelerator.m_context, GL_TEXTURE_2D, 0, textureId,
+      compute::opengl_texture::mem_flags::write_only);
+  demo_gpu(accelerator, texture);
   glClear(GL_COLOR_BUFFER_BIT);
   glLoadIdentity();
-  glTranslatef(0.f, 0.f, 0.f );
+  glTranslatef(0.f, 0.f, 0.f);
   glBindTexture(GL_TEXTURE_2D, textureId);
   glBegin(GL_QUADS);
   glTexCoord2f(0.f, 0.f);
