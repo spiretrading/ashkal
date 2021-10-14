@@ -766,7 +766,6 @@ void intersect(const Scene& scene, compute::opengl_texture& texture, int width,
   auto host = std::vector<Voxel>();
   host.resize(SIZE * SIZE * SIZE, Voxel::NONE());
   auto s = compute::vector<Voxel>(SIZE * SIZE * SIZE, accelerator.m_context);
-  glFinish();
   profile([&] {
     for(auto x = 0; x < SIZE; ++x) {
       for(auto y = 0; y < SIZE; ++y) {
@@ -777,8 +776,6 @@ void intersect(const Scene& scene, compute::opengl_texture& texture, int width,
       }
     }
     compute::copy(host.begin(), host.end(), s.begin(), accelerator.m_queue);
-    compute::opengl_enqueue_acquire_gl_objects(1, &texture.get(),
-      accelerator.m_queue);
     kernel.set_arg(0, s.get_buffer());
     kernel.set_arg(1, SIZE);
     kernel.set_arg(2, SIZE);
@@ -790,6 +787,9 @@ void intersect(const Scene& scene, compute::opengl_texture& texture, int width,
     kernel.set_arg(8, sizeof(Vector), &top_left);
     kernel.set_arg(9, sizeof(Vector), &x_shift);
     kernel.set_arg(10, sizeof(Vector), &y_shift);
+    glFinish();
+    compute::opengl_enqueue_acquire_gl_objects(1, &texture.get(),
+      accelerator.m_queue);
     accelerator.m_queue.enqueue_1d_range_kernel(kernel, 0, 1920 * 1080, 0);
     accelerator.m_queue.finish();
     compute::opengl_enqueue_release_gl_objects(1, &texture.get(),
@@ -865,8 +865,10 @@ auto make_shader() {
   glBindTexture(GL_TEXTURE_2D, textureId);
   glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, 1920, 1080, 0, GL_RGBA,
     GL_UNSIGNED_BYTE, nullptr);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
   glBindTexture(GL_TEXTURE_2D, 0);
   return textureId;
 }
