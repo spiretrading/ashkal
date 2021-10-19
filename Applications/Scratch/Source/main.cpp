@@ -121,6 +121,98 @@ Point operator -(Point left, Vector right) {
   return left + -right;
 }
 
+struct Matrix {
+  static constexpr auto WIDTH = 4;
+  static constexpr auto HEIGHT = 4;
+
+  std::array<float, WIDTH * HEIGHT> m_elements;
+
+  static const Matrix& IDENTITY() {
+    static auto identity = [] {
+      auto identity = Matrix();
+      identity.set(0, 0, 1);
+      identity.set(1, 1, 1);
+      identity.set(2, 2, 1);
+      identity.set(3, 3, 1);
+      return identity;
+    }();
+    return identity;
+  }
+
+  float get(int x, int y) const {
+    return m_elements[x + WIDTH * y];
+  }
+
+  void set(int x, int y, float value) {
+    m_elements[x + WIDTH * y] = value;
+  }
+};
+
+Matrix operator +(Matrix left, const Matrix& right) {
+  for(auto i = std::size_t(0); i != left.m_elements.size(); ++i) {
+    left.m_elements[i] += right.m_elements[i];
+  }
+  return left;
+}
+
+Matrix operator -(Matrix left, const Matrix& right) {
+  for(auto i = std::size_t(0); i != left.m_elements.size(); ++i) {
+    left.m_elements[i] -= right.m_elements[i];
+  }
+  return left;
+}
+
+Matrix operator *(Matrix left, const Matrix& right) {
+  for(auto y = 0; y != Matrix::HEIGHT; ++y) {
+    for(auto x = 0; x != Matrix::WIDTH; ++x) {
+      auto e = 0.f;
+      for(auto z = 0; z != Matrix::HEIGHT; ++z) {
+        e += left.get(z, y) * right.get(x, z);
+      }
+      left.set(x, y, e);
+    }
+  }
+  return left;
+}
+
+Point operator *(const Matrix& left, Point right) {
+  auto get = [&] (int x) {
+    if(x == 0) {
+      return right.m_x;
+    } else if(x == 1) {
+      return right.m_y;
+    } else if(x == 2) {
+      return right.m_z;
+    }
+    return 1.f;
+  };
+  auto set = [&] (int x, float v) {
+    if(x == 0) {
+      right.m_x = v;
+    } else if(x == 1) {
+      right.m_y = v;
+    } else if(x == 2) {
+      right.m_z = v;
+    }
+  };
+  for(auto y = 0; y != Matrix::HEIGHT; ++y) {
+    auto e = 0.f;
+    for(auto x = 0; x != Matrix::WIDTH; ++x) {
+      e += left.get(x, y) * get(x);
+    }
+    set(y, e);
+  }
+  return right;
+}
+
+Matrix translate(Vector offset) {
+  auto translation = Matrix::IDENTITY();
+  translation.set(3, 0, offset.m_x);
+  translation.set(3, 1, offset.m_y);
+  translation.set(3, 2, offset.m_z);
+  return translation;
+}
+
 Point floor(Point point) {
   return Point(
     std::floor(point.m_x), std::floor(point.m_y), std::floor(point.m_z));
@@ -745,20 +837,23 @@ void intersect(const Scene& scene, compute::opengl_texture& texture, int width,
     auto program = cache->get_or_build(key, {}, source, accelerator.m_context);
     return program.create_kernel("intersect");
   }();
-  auto SIZE = 64;
-  auto host = std::vector<Voxel>();
-  host.resize(SIZE * SIZE * SIZE, Voxel::NONE());
-  auto s = compute::vector<Voxel>(SIZE * SIZE * SIZE, accelerator.m_context);
-  for(auto x = 0; x < SIZE; ++x) {
-    for(auto y = 0; y < SIZE; ++y) {
-      for(auto z = 0; z < SIZE; ++z) {
-        host[x + SIZE * (y + SIZE * z)] = scene.get(Point(
-          static_cast<float>(x), static_cast<float>(y),
-          static_cast<float>(z)));
+  static auto SIZE = 64;
+  static auto s = [&] {
+    auto s = compute::vector<Voxel>(SIZE * SIZE * SIZE, accelerator.m_context);
+    auto host = std::vector<Voxel>();
+    host.resize(SIZE * SIZE * SIZE, Voxel::NONE());
+    for(auto x = 0; x < SIZE; ++x) {
+      for(auto y = 0; y < SIZE; ++y) {
+        for(auto z = 0; z < SIZE; ++z) {
+          host[x + SIZE * (y + SIZE * z)] = scene.get(Point(
+            static_cast<float>(x), static_cast<float>(y),
+            static_cast<float>(z)));
+        }
       }
     }
-  }
-  compute::copy(host.begin(), host.end(), s.begin(), accelerator.m_queue);
+    compute::copy(host.begin(), host.end(), s.begin(), accelerator.m_queue);
+    return s;
+  }();
   kernel.set_arg(0, s.get_buffer());
   kernel.set_arg(1, SIZE);
   kernel.set_arg(2, SIZE);
@@ -834,8 +929,18 @@ auto make_shader(int width, int height) {
   return texture_id;
 }
 
+void move_forward(Camera& camera) {
+  camera.set_position(translate(camera.get_direction() / 10.f) * camera.get_position());
+}
+
+void move_backward(Camera& camera) {
+  camera.set_position(translate(-camera.get_direction() / 10.f) * camera.get_position());
+}
+
 int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
     LPSTR pCmdLine, int nCmdShow) {
+  freopen("stdout.log", "w", stdout);
+  freopen("stderr.log", "w", stderr);
   if(SDL_Init(SDL_INIT_EVERYTHING) < 0) {
     std::cout << "Error initializing SDL: " << SDL_GetError() << std::endl;
     return 1;
@@ -886,9 +991,22 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
   auto running = true;
   auto event = SDL_Event();
   auto window_id = SDL_GetWindowID(window);
+  auto frames = 0;
+  auto start = std::chrono::high_resolution_clock::now();
   while(running) {
+    ++frames;
     if(SDL_PollEvent(&event)) {
       switch(event.type) {
+        case SDL_KEYDOWN:
+          switch(event.key.keysym.sym) {
+            case SDLK_DOWN:
+              move_backward(camera);
+              break;
+            case SDLK_UP:
+              move_forward(camera);
+              break;
+          }
+          break;
         case SDL_WINDOWEVENT:
           if(event.window.windowID == window_id) {
             switch(event.window.event) {
@@ -920,6 +1038,8 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
     SDL_GL_SwapWindow(window);
     glBindTexture(GL_TEXTURE_2D, 0);
   }
+  auto end = std::chrono::high_resolution_clock::now();
+  std::cout << (frames / std::chrono::duration_cast<std::chrono::duration<double>>(end - start).count()) << std::endl;
   SDL_DestroyWindow(window);
   SDL_GL_DeleteContext(gl_context);
   glDeleteTextures(1, &texture_id);
