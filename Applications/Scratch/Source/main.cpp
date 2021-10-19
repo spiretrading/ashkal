@@ -2,6 +2,7 @@
 #include <chrono>
 #include <cstdint>
 #include <iostream>
+#include <numbers>
 #include <vector>
 #include <GL/glew.h>
 #include <SDL.h>
@@ -205,12 +206,84 @@ Point operator *(const Matrix& left, Point right) {
   return right;
 }
 
+Vector operator *(const Matrix& left, Vector right) {
+  auto get = [&] (int x) {
+    if(x == 0) {
+      return right.m_x;
+    } else if(x == 1) {
+      return right.m_y;
+    } else if(x == 2) {
+      return right.m_z;
+    }
+    return 1.f;
+  };
+  auto set = [&] (int x, float v) {
+    if(x == 0) {
+      right.m_x = v;
+    } else if(x == 1) {
+      right.m_y = v;
+    } else if(x == 2) {
+      right.m_z = v;
+    }
+  };
+  for(auto y = 0; y != Matrix::HEIGHT; ++y) {
+    auto e = 0.f;
+    for(auto x = 0; x != Matrix::WIDTH; ++x) {
+      e += left.get(x, y) * get(x);
+    }
+    set(y, e);
+  }
+  return right;
+}
+
 Matrix translate(Vector offset) {
   auto translation = Matrix::IDENTITY();
   translation.set(3, 0, offset.m_x);
   translation.set(3, 1, offset.m_y);
   translation.set(3, 2, offset.m_z);
   return translation;
+}
+
+Matrix pitch(float radians) {
+  auto transform = Matrix();
+  transform.set(0, 0, cos(radians));
+  transform.set(1, 0, 0);
+  transform.set(2, 0, sin(radians));
+  transform.set(3, 0, 0);
+  transform.set(0, 1, 0);
+  transform.set(1, 1, 1);
+  transform.set(2, 1, 0);
+  transform.set(3, 1, 0);
+  transform.set(0, 2, -sin(radians));
+  transform.set(1, 2, 0);
+  transform.set(2, 2, cos(radians));
+  transform.set(3, 2, 0);
+  transform.set(0, 3, 0);
+  transform.set(1, 3, 0);
+  transform.set(2, 3, 0);
+  transform.set(3, 3, 1);
+  return transform;
+}
+
+Matrix yaw(float radians) {
+  auto transform = Matrix();
+  transform.set(0, 0, 1);
+  transform.set(1, 0, 0);
+  transform.set(2, 0, 0);
+  transform.set(3, 0, 0);
+  transform.set(0, 1, 0);
+  transform.set(1, 1, cos(radians));
+  transform.set(2, 1, -sin(radians));
+  transform.set(3, 1, 0);
+  transform.set(0, 2, 0);
+  transform.set(1, 2, sin(radians));
+  transform.set(2, 2, cos(radians));
+  transform.set(3, 2, 0);
+  transform.set(0, 3, 0);
+  transform.set(1, 3, 0);
+  transform.set(2, 3, 0);
+  transform.set(3, 3, 1);
+  return transform;
 }
 
 Point floor(Point point) {
@@ -349,6 +422,9 @@ class Sphere : public Model {
     Voxel get(Point point) const override {
       auto range = floor(point) - m_inner;
       if(dot(range, range) <= m_radius * m_radius) {
+        if(point.m_y > m_radius) {
+          return Voxel(Color(0, 0, 255));
+        }
         return Voxel(m_color);
       }
       return Voxel::NONE();
@@ -937,6 +1013,16 @@ void move_backward(Camera& camera) {
   camera.set_position(translate(-camera.get_direction() / 10.f) * camera.get_position());
 }
 
+void move_left(Camera& camera) {
+  auto roll = cross(camera.get_orientation(), camera.get_direction());
+  camera.set_position(translate(-roll / 10.f) * camera.get_position());
+}
+
+void move_right(Camera& camera) {
+  auto roll = cross(camera.get_orientation(), camera.get_direction());
+  camera.set_position(translate(roll / 10.f) * camera.get_position());
+}
+
 int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
     LPSTR pCmdLine, int nCmdShow) {
   freopen("stdout.log", "w", stdout);
@@ -993,20 +1079,12 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
   auto window_id = SDL_GetWindowID(window);
   auto frames = 0;
   auto start = std::chrono::high_resolution_clock::now();
+  auto mouse_x = 0;
+  auto mouse_y = 0;
   while(running) {
     ++frames;
     if(SDL_PollEvent(&event)) {
       switch(event.type) {
-        case SDL_KEYDOWN:
-          switch(event.key.keysym.sym) {
-            case SDLK_DOWN:
-              move_backward(camera);
-              break;
-            case SDLK_UP:
-              move_forward(camera);
-              break;
-          }
-          break;
         case SDL_WINDOWEVENT:
           if(event.window.windowID == window_id) {
             switch(event.window.event) {
@@ -1022,7 +1100,25 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
           break;
       }
     }
-//    render_cpu(scene, accelerator, texture, texture_id, width, height, camera);
+    auto state = SDL_GetKeyboardState(nullptr);
+    if(state[SDL_SCANCODE_W] || state[SDL_SCANCODE_UP]) {
+      move_forward(camera);
+    } else if(state[SDL_SCANCODE_S] || state[SDL_SCANCODE_DOWN]) {
+      move_backward(camera);
+    }
+    if(state[SDL_SCANCODE_A] || state[SDL_SCANCODE_LEFT]) {
+      move_left(camera);
+    } else if(state[SDL_SCANCODE_D] || state[SDL_SCANCODE_RIGHT]) {
+      move_right(camera);
+    }
+    SDL_GetMouseState(&mouse_x, &mouse_y);
+    auto base_direction = Vector(0, 0, 1);
+    auto base_orientation = Vector(0, 1, 0);
+    auto delta_y = (mouse_y / (height / 2.f) - 1.f) * (std::numbers::pi_v<float> / 2);
+    auto delta_x = (mouse_x / (width / 2.f) - 1.f) * (std::numbers::pi_v<float> / 2);
+    auto rotation = yaw(delta_y) * pitch(delta_x);
+    camera.set_direction(rotation * base_direction);
+    camera.set_orientation(rotation * base_orientation);
     render_gpu(scene, accelerator, texture, width, height, camera);
     glBindTexture(GL_TEXTURE_2D, texture_id);
     glBegin(GL_QUADS);
