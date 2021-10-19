@@ -867,7 +867,7 @@ void intersect(const Scene& scene, compute::opengl_texture& texture, int width,
   compute::opengl_enqueue_acquire_gl_objects(1, &texture.get(),
     accelerator.m_queue);
   accelerator.m_queue.enqueue_nd_range_kernel(kernel, compute::dim(0, 0),
-    compute::dim(width, height), compute::dim(1, 1));
+    compute::dim(width, height), compute::dim(4, 4));
   compute::opengl_enqueue_release_gl_objects(1, &texture.get(),
     accelerator.m_queue);
   accelerator.m_queue.finish();
