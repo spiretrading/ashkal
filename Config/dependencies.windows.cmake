@@ -17,6 +17,12 @@ set(SDL_MAIN_LIBRARY_OPTIMIZED_PATH
   "${PROJECT_BINARY_DIR}/Dependencies/SDL2-2.0.16/build/Release/SDL2main.lib")
 set(SDL_LIBRARY_OPTIMIZED_PATH
   "${PROJECT_BINARY_DIR}/Dependencies/SDL2-2.0.16/build/Release/SDL2-static.lib")
+set(SDL_TTF_INCLUDE_PATH
+  "${PROJECT_BINARY_DIR}/Dependencies/SDL2_ttf-2.0.15")
+set(SDL_TTF_LIBRARY_DEBUG_PATH
+  "${PROJECT_BINARY_DIR}/Dependencies/SDL2_ttf-2.0.15/build/Debug/SDL2_ttf.lib")
+set(SDL_TTF_LIBRARY_OPTIMIZED_PATH
+  "${PROJECT_BINARY_DIR}/Dependencies/SDL2_ttf-2.0.15/build/Release/SDL2_ttf.lib")
 set(OPENCL_INCLUDE_PATH
   "${PROJECT_BINARY_DIR}/Dependencies/OpenCL-SDK/external/OpenCL-Headers")
 set(OPENCL_LIBRARY_DEBUG_PATH

@@ -24,6 +24,7 @@ include_directories(${BOOST_INCLUDE_PATH})
 include_directories(${GLEW_INCLUDE_PATH})
 include_directories(${OPENCL_INCLUDE_PATH})
 include_directories(${SDL_INCLUDE_PATH})
+include_directories(${SDL_TTF_INCLUDE_PATH})
 link_directories(${BOOST_DEBUG_PATH})
 link_directories(${BOOST_OPTIMIZED_PATH})
 add_definitions(-DCL_TARGET_OPENCL_VERSION=300)
@@ -69,7 +70,9 @@ target_link_libraries(Scratch
   debug ${OPENCL_LIBRARY_DEBUG_PATH}
   optimized ${OPENCL_LIBRARY_OPTIMIZED_PATH}
   debug ${SDL_LIBRARY_DEBUG_PATH}
-  optimized ${SDL_LIBRARY_OPTIMIZED_PATH})
+  optimized ${SDL_LIBRARY_OPTIMIZED_PATH}
+  debug ${SDL_TTF_LIBRARY_DEBUG_PATH}
+  optimized ${SDL_TTF_LIBRARY_OPTIMIZED_PATH})
 if(WIN32)
   target_link_libraries(Scratch Imm32.lib opengl32.lib Setupapi.lib Version.lib
     winmm.lib)

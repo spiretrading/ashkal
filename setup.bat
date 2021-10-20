@@ -20,7 +20,7 @@ FOR /f "usebackq delims=" %%i IN (`!VSWHERE! -prerelease -latest -property insta
   )
 )
 IF NOT EXIST doctest-2.4.6 (
-  wget https://github.com/onqtam/doctest/archive/2.4.6.zip --no-check-certificate
+  wget https://github.com/onqtam/doctest/archive/2.4.6.zip
   IF !ERRORLEVEL! LEQ 0 (
     tar -xf 2.4.6.zip
   ) ELSE (
@@ -28,8 +28,22 @@ IF NOT EXIST doctest-2.4.6 (
   )
   DEL /F /Q 2.4.6.zip
 )
+IF NOT EXIST freetype-2.9.1 (
+  wget https://download.savannah.gnu.org/releases/freetype/freetype-2.9.1.tar.gz
+  tar -xf freetype-2.9.1.tar.gz
+  PUSHD freetype-2.9.1
+  cmake -E make_directory build
+  cmake -E chdir build cmake ..
+  PUSHD build
+  cmake --build . --target INSTALL --config Debug
+  cmake --build . --target INSTALL --config Release
+  POPD
+  POPD
+  DEL /F /Q freetype-2.9.1.tar.gz
+)
+
 IF NOT EXIST glew-2.1.0 (
-  wget https://sourceforge.net/projects/glew/files/glew/2.1.0/glew-2.1.0.zip/download -O glew-2.1.0.zip --no-check-certificate
+  wget https://sourceforge.net/projects/glew/files/glew/2.1.0/glew-2.1.0.zip/download -O glew-2.1.0.zip
   IF !ERRORLEVEL! LEQ 0 (
     tar -xf glew-2.1.0.zip
     PUSHD glew-2.1.0
@@ -66,8 +80,23 @@ IF NOT EXIST SDL2-2.0.16 (
   cmake --build . --target INSTALL --config Debug
   cmake --build . --target INSTALL --config Release
   POPD
+  CP SDL2Config.cmake build\CMakeFiles\Export\cmake
   POPD
   DEL SDL2-2.0.16.zip
+)
+IF NOT EXIST SDL2_ttf-2.0.15 (
+  wget https://www.libsdl.org/projects/SDL_ttf/release/SDL2_ttf-2.0.15.zip
+  tar -xf SDL2_ttf-2.0.15.zip
+  PUSHD SDL2_ttf-2.0.15
+  sed -i "/^add_library/i include_directories(${FREETYPE_INCLUDE_DIRS})" CMakeLists.txt
+  mkdir build
+  PUSHD build
+  cmake -DSDL2_DIR=!ROOT!\SDL2-2.0.16\build -DFREETYPE_LIBRARY=!ROOT!\freetype-2.9.1\build\Release\ -DFREETYPE_INCLUDE_DIRS=!ROOT!\freetype-2.9.1\include\ ..
+  cmake --build . --target INSTALL --config Debug
+  cmake --build . --target INSTALL --config Release
+  POPD
+  POPD
+  DEL SDL2_ttf-2.0.15.zip
 )
 IF "%NUMBER_OF_PROCESSORS%" == "" (
   SET BJAM_PROCESSORS=
@@ -75,7 +104,7 @@ IF "%NUMBER_OF_PROCESSORS%" == "" (
   SET BJAM_PROCESSORS="-j%NUMBER_OF_PROCESSORS%"
 )
 IF NOT EXIST boost_1_77_0 (
-  wget https://boostorg.jfrog.io/artifactory/main/release/1.77.0/source/boost_1_77_0.zip -O boost_1_77_0.zip --no-check-certificate
+  wget https://boostorg.jfrog.io/artifactory/main/release/1.77.0/source/boost_1_77_0.zip -O boost_1_77_0.zip
   IF !ERRORLEVEL! LEQ 0 (
     tar -xf boost_1_77_0.zip
     PUSHD boost_1_77_0

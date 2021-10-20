@@ -6,6 +6,7 @@
 #include <vector>
 #include <GL/glew.h>
 #include <SDL.h>
+#include <SDF_ttf.h>
 #include <boost/compute.hpp>
 #include <Windows.h>
 #include <boost/compute/interop/opengl/acquire.hpp>
@@ -1021,6 +1022,28 @@ void move_left(Camera& camera) {
 void move_right(Camera& camera) {
   auto roll = cross(camera.get_orientation(), camera.get_direction());
   camera.set_position(translate(roll / 10.f) * camera.get_position());
+}
+
+SDL_Texture* renderText(const std::string &message, SDL_Color color,
+    int fontSize, SDL_Renderer *renderer) {
+  auto font = TTF_OpenFont("C:\\Windows\Fonts\arial.ttf", fontSize);
+  if(!font){
+    return nullptr;
+  }
+  auto surface = TTF_RenderText_Blended(font, message.c_str(), color);
+  if (surf == nullptr){
+      TTF_CloseFont(font);
+      logSDLError(std::cout, "TTF_RenderText");
+      return nullptr;
+  }
+  SDL_Texture *texture = SDL_CreateTextureFromSurface(renderer, surf);
+  if (texture == nullptr){
+      logSDLError(std::cout, "CreateTexture");
+  }
+  //Clean up the surface and font
+  SDL_FreeSurface(surf);
+  TTF_CloseFont(font);
+  return texture;
 }
 
 int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
