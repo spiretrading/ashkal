@@ -6,7 +6,7 @@
 #include <vector>
 #include <GL/glew.h>
 #include <SDL.h>
-#include <SDF_ttf.h>
+#include <SDL_ttf.h>
 #include <boost/compute.hpp>
 #include <Windows.h>
 #include <boost/compute/interop/opengl/acquire.hpp>
@@ -1024,24 +1024,22 @@ void move_right(Camera& camera) {
   camera.set_position(translate(roll / 10.f) * camera.get_position());
 }
 
-SDL_Texture* renderText(const std::string &message, SDL_Color color,
-    int fontSize, SDL_Renderer *renderer) {
-  auto font = TTF_OpenFont("C:\\Windows\Fonts\arial.ttf", fontSize);
-  if(!font){
+SDL_Texture* renderText(const std::string& message, SDL_Color color,
+    int font_size, SDL_Renderer* renderer) {
+  auto font = TTF_OpenFont("C:\\Windows\\Fonts\\arial.ttf", font_size);
+  if(!font) {
     return nullptr;
   }
   auto surface = TTF_RenderText_Blended(font, message.c_str(), color);
-  if (surf == nullptr){
-      TTF_CloseFont(font);
-      logSDLError(std::cout, "TTF_RenderText");
-      return nullptr;
+  if(!surface) {
+    TTF_CloseFont(font);
+    return nullptr;
   }
-  SDL_Texture *texture = SDL_CreateTextureFromSurface(renderer, surf);
-  if (texture == nullptr){
-      logSDLError(std::cout, "CreateTexture");
+  auto texture = SDL_CreateTextureFromSurface(renderer, surface);
+  if(!texture) {
+    return nullptr;
   }
-  //Clean up the surface and font
-  SDL_FreeSurface(surf);
+  SDL_FreeSurface(surface);
   TTF_CloseFont(font);
   return texture;
 }

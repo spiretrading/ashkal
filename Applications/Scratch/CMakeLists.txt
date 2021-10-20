@@ -21,6 +21,7 @@ endif()
 include(../../Config/dependencies.cmake)
 include_directories(${ASHKAL_INCLUDE_PATH})
 include_directories(${BOOST_INCLUDE_PATH})
+include_directories(${FREETYPE_INCLUDE_PATH})
 include_directories(${GLEW_INCLUDE_PATH})
 include_directories(${OPENCL_INCLUDE_PATH})
 include_directories(${SDL_INCLUDE_PATH})
@@ -65,6 +66,8 @@ endif()
 add_executable(Scratch ${app_type} ${header_files} ${source_files})
 set_source_files_properties(${header_files} PROPERTIES HEADER_FILE_ONLY TRUE)
 target_link_libraries(Scratch
+  debug ${FREETYPE_LIBRARY_DEBUG_PATH}
+  optimized ${FREETYPE_LIBRARY_OPTIMIZED_PATH}
   debug ${GLEW_LIBRARY_DEBUG_PATH}
   optimized ${GLEW_LIBRARY_OPTIMIZED_PATH}
   debug ${OPENCL_LIBRARY_DEBUG_PATH}

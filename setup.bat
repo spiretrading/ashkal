@@ -32,9 +32,9 @@ IF NOT EXIST freetype-2.9.1 (
   wget https://download.savannah.gnu.org/releases/freetype/freetype-2.9.1.tar.gz
   tar -xf freetype-2.9.1.tar.gz
   PUSHD freetype-2.9.1
-  cmake -E make_directory build
-  cmake -E chdir build cmake ..
+  MKDIR build
   PUSHD build
+  cmake -DCMAKE_INSTALL_PREFIX=!ROOT!\freetype-2.9.1\build ..
   cmake --build . --target INSTALL --config Debug
   cmake --build . --target INSTALL --config Release
   POPD
@@ -48,9 +48,9 @@ IF NOT EXIST glew-2.1.0 (
     tar -xf glew-2.1.0.zip
     PUSHD glew-2.1.0
     cd build
-    cmake ./cmake
-    cmake --build . --target glew_s --config Debug
-    cmake --build . --target glew_s --config Release
+    cmake -DCMAKE_INSTALL_PREFIX=!ROOT!\glew-2.1.0\build ./cmake
+    cmake --build . --target INSTALL --config Debug
+    cmake --build . --target INSTALL --config Release
     POPD
   ) ELSE (
     SET EXIT_STATUS=1
@@ -64,7 +64,7 @@ IF NOT EXIST OpenCL-SDK (
   git submodule update
   mkdir build
   PUSHD build
-  cmake ..
+  cmake -DCMAKE_INSTALL_PREFIX=!ROOT!\OpenCL-SDK\build ..
   cmake --build . --target INSTALL --config Debug
   cmake --build . --target INSTALL --config Release
   POPD
@@ -76,11 +76,12 @@ IF NOT EXIST SDL2-2.0.16 (
   PUSHD SDL2-2.0.16
   mkdir build
   PUSHD build
-  cmake ..
+  cmake -DCMAKE_INSTALL_PREFIX=!ROOT!\SDL2-2.0.16 ..
   cmake --build . --target INSTALL --config Debug
   cmake --build . --target INSTALL --config Release
+  CP ..\SDL2Config.cmake .
+  CP CMakeFiles\Export\cmake\* .
   POPD
-  CP SDL2Config.cmake build\CMakeFiles\Export\cmake
   POPD
   DEL SDL2-2.0.16.zip
 )
@@ -91,7 +92,7 @@ IF NOT EXIST SDL2_ttf-2.0.15 (
   sed -i "/^add_library/i include_directories(${FREETYPE_INCLUDE_DIRS})" CMakeLists.txt
   mkdir build
   PUSHD build
-  cmake -DSDL2_DIR=!ROOT!\SDL2-2.0.16\build -DFREETYPE_LIBRARY=!ROOT!\freetype-2.9.1\build\Release\ -DFREETYPE_INCLUDE_DIRS=!ROOT!\freetype-2.9.1\include\ ..
+  cmake -DCMAKE_INSTALL_PREFIX=!ROOT!\SDL2_ttf-2.0.15\build -DSDL2_DIR=!ROOT!\SDL2-2.0.16\build -DFREETYPE_LIBRARY=!ROOT!\freetype-2.9.1\build\Release\ -DFREETYPE_INCLUDE_DIRS=!ROOT!\freetype-2.9.1\include\ ..
   cmake --build . --target INSTALL --config Debug
   cmake --build . --target INSTALL --config Release
   POPD
