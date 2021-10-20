@@ -1024,21 +1024,24 @@ void move_right(Camera& camera) {
   camera.set_position(translate(roll / 10.f) * camera.get_position());
 }
 
-SDL_Texture* renderText(const std::string& message, SDL_Color color,
-    int font_size, SDL_Renderer* renderer) {
+auto render_text(const std::string& message, SDL_Color color, int font_size) {
+  auto texture = GLuint(0);
   auto font = TTF_OpenFont("C:\\Windows\\Fonts\\arial.ttf", font_size);
   if(!font) {
-    return nullptr;
+    return texture;
   }
   auto surface = TTF_RenderText_Blended(font, message.c_str(), color);
   if(!surface) {
     TTF_CloseFont(font);
-    return nullptr;
+    return texture;
   }
-  auto texture = SDL_CreateTextureFromSurface(renderer, surface);
-  if(!texture) {
-    return nullptr;
-  }
+  glGenTextures(1, &texture);
+  glBindTexture(GL_TEXTURE_2D, texture);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, surface->w, surface->h, 0, GL_BGRA,
+    GL_UNSIGNED_BYTE, surface->pixels);
+  glBindTexture(GL_TEXTURE_2D, 0);
   SDL_FreeSurface(surface);
   TTF_CloseFont(font);
   return texture;
@@ -1052,6 +1055,7 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
     std::cout << "Error initializing SDL: " << SDL_GetError() << std::endl;
     return 1;
   }
+  TTF_Init();
   SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
   SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 1);
   auto width = 1920;
@@ -1081,6 +1085,8 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
   glMatrixMode(GL_MODELVIEW);
   glLoadIdentity();
   glEnable(GL_TEXTURE_2D);
+  glEnable(GL_BLEND);
+  glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
   auto texture_id = make_shader(width, height);
   auto texture =
     compute::opengl_texture(accelerator.m_context, GL_TEXTURE_2D, 0, texture_id,
@@ -1102,6 +1108,10 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
   auto start = std::chrono::high_resolution_clock::now();
   auto mouse_x = 0;
   auto mouse_y = 0;
+  auto color = SDL_Color();
+  color.g = 255;
+  color.a = 255;
+  auto text_texture = render_text("Hello world", color, 12);
   while(running) {
     ++frames;
     if(SDL_PollEvent(&event)) {
@@ -1140,6 +1150,7 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
     auto rotation = yaw(delta_y) * pitch(delta_x);
     camera.set_direction(rotation * base_direction);
     camera.set_orientation(rotation * base_orientation);
+/*
     render_gpu(scene, accelerator, texture, width, height, camera);
     glBindTexture(GL_TEXTURE_2D, texture_id);
     glBegin(GL_QUADS);
@@ -1154,6 +1165,21 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
     glEnd();
     SDL_GL_SwapWindow(window);
     glBindTexture(GL_TEXTURE_2D, 0);
+*/
+
+    glBindTexture(GL_TEXTURE_2D, text_texture);
+    glBegin(GL_QUADS);
+    glTexCoord2f(0.f, 0.f);
+    glVertex2f(0.f, 0.f);
+    glTexCoord2f(1.f, 0.f);
+    glVertex2f(static_cast<float>(width), 0.f);
+    glTexCoord2f(1.f, 1.f);
+    glVertex2f(static_cast<float>(width), static_cast<float>(height));
+    glTexCoord2f(0.f, 1.f);
+    glVertex2f(0.f, static_cast<float>(height));
+    glEnd();
+    glBindTexture(GL_TEXTURE_2D, 0);
+    SDL_GL_SwapWindow(window);
   }
   auto end = std::chrono::high_resolution_clock::now();
   std::cout << (frames / std::chrono::duration_cast<std::chrono::duration<double>>(end - start).count()) << std::endl;
