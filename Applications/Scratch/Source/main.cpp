@@ -1028,23 +1028,47 @@ auto render_text(const std::string& message, SDL_Color color, int font_size) {
   auto texture = GLuint(0);
   auto font = TTF_OpenFont("C:\\Windows\\Fonts\\arial.ttf", font_size);
   if(!font) {
-    return texture;
+    return std::tuple(0, 0, texture);
   }
   auto surface = TTF_RenderText_Blended(font, message.c_str(), color);
   if(!surface) {
     TTF_CloseFont(font);
-    return texture;
+    return std::tuple(0, 0, texture);
   }
   glGenTextures(1, &texture);
   glBindTexture(GL_TEXTURE_2D, texture);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, surface->w, surface->h, 0, GL_BGRA,
+  auto width = surface->w;
+  auto height = surface->h;
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_BGRA,
     GL_UNSIGNED_BYTE, surface->pixels);
   glBindTexture(GL_TEXTURE_2D, 0);
   SDL_FreeSurface(surface);
   TTF_CloseFont(font);
-  return texture;
+  return std::tuple(width, height, texture);
+}
+
+void draw_text(const std::string& text, int size, int x, int y,
+    const SDL_Color& color) {
+  auto [width, height, texture] = render_text(text, color, size);
+  glBindTexture(GL_TEXTURE_2D, texture);
+  glEnable(GL_BLEND);
+  glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+  glBegin(GL_QUADS);
+  glTexCoord2f(0.f, 0.f);
+  glVertex2f(0.f, 0.f);
+  glTexCoord2f(1.f, 0.f);
+  glVertex2f(static_cast<float>(width), 0.f);
+  glTexCoord2f(1.f, 1.f);
+  glVertex2f(static_cast<float>(width), static_cast<float>(height));
+  glTexCoord2f(0.f, 1.f);
+  glVertex2f(0.f, static_cast<float>(height));
+  glEnd();
+  glDisable(GL_BLEND);
+  glBlendFunc(GL_ONE, GL_ZERO);
+  glBindTexture(GL_TEXTURE_2D, 0);
+  glDeleteTextures(1, &texture);
 }
 
 int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
@@ -1085,8 +1109,6 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
   glMatrixMode(GL_MODELVIEW);
   glLoadIdentity();
   glEnable(GL_TEXTURE_2D);
-  glEnable(GL_BLEND);
-  glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
   auto texture_id = make_shader(width, height);
   auto texture =
     compute::opengl_texture(accelerator.m_context, GL_TEXTURE_2D, 0, texture_id,
@@ -1108,11 +1130,8 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
   auto start = std::chrono::high_resolution_clock::now();
   auto mouse_x = 0;
   auto mouse_y = 0;
-  auto color = SDL_Color();
-  color.g = 255;
-  color.a = 255;
-  auto text_texture = render_text("Hello world", color, 12);
   while(running) {
+    glClear(GL_COLOR_BUFFER_BIT);
     ++frames;
     if(SDL_PollEvent(&event)) {
       switch(event.type) {
@@ -1150,8 +1169,8 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
     auto rotation = yaw(delta_y) * pitch(delta_x);
     camera.set_direction(rotation * base_direction);
     camera.set_orientation(rotation * base_orientation);
-/*
     render_gpu(scene, accelerator, texture, width, height, camera);
+//    render_cpu(scene, accelerator, texture, texture_id, width, height, camera);
     glBindTexture(GL_TEXTURE_2D, texture_id);
     glBegin(GL_QUADS);
     glTexCoord2f(0.f, 0.f);
@@ -1163,22 +1182,9 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
     glTexCoord2f(0.f, 1.f);
     glVertex2f(0.f, static_cast<float>(height));
     glEnd();
-    SDL_GL_SwapWindow(window);
     glBindTexture(GL_TEXTURE_2D, 0);
-*/
-
-    glBindTexture(GL_TEXTURE_2D, text_texture);
-    glBegin(GL_QUADS);
-    glTexCoord2f(0.f, 0.f);
-    glVertex2f(0.f, 0.f);
-    glTexCoord2f(1.f, 0.f);
-    glVertex2f(static_cast<float>(width), 0.f);
-    glTexCoord2f(1.f, 1.f);
-    glVertex2f(static_cast<float>(width), static_cast<float>(height));
-    glTexCoord2f(0.f, 1.f);
-    glVertex2f(0.f, static_cast<float>(height));
-    glEnd();
-    glBindTexture(GL_TEXTURE_2D, 0);
+    draw_text("Position: " + lexical_cast<std::string>(camera.get_position()),
+      12, 0, 0, SDL_Color{.g=255, .a=255});
     SDL_GL_SwapWindow(window);
   }
   auto end = std::chrono::high_resolution_clock::now();

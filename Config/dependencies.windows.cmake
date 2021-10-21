@@ -5,7 +5,7 @@ set(BOOST_OPTIMIZED_PATH "${PROJECT_BINARY_DIR}/Dependencies/boost_1_77_0/lib")
 set(FREETYPE_INCLUDE_PATH "${PROJECT_BINARY_DIR}/Dependencies/freetype-2.9.1/include")
 set(FREETYPE_LIBRARY_DEBUG_PATH
   "${PROJECT_BINARY_DIR}/Dependencies/freetype-2.9.1/build/Debug/freetyped.lib")
-set(GLEW_LIBRARY_OPTIMIZED_PATH
+set(FREETYPE_LIBRARY_OPTIMIZED_PATH
   "${PROJECT_BINARY_DIR}/Dependencies/freetype-2.9.1/build/Release/freetype.lib")
 set(GLEW_INCLUDE_PATH "${PROJECT_BINARY_DIR}/Dependencies/glew-2.1.0/include")
 set(GLEW_LIBRARY_DEBUG_PATH
