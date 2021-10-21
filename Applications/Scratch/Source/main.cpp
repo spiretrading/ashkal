@@ -1120,8 +1120,8 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
   auto shape = std::make_shared<Sphere>(10, Color(255, 0, 0, 0));
   scene.add(shape);
   auto camera = Camera();
-  camera.set_position(Point(9.5f, 9.5f, -10));
-  camera.set_direction(Vector(0, 0, 1));
+  camera.set_position(Point(9.5f, 9.5f, 29));
+  camera.set_direction(Vector(0, 0, -1));
   camera.set_orientation(Vector(0, 1, 0));
   auto running = true;
   auto event = SDL_Event();
@@ -1162,15 +1162,17 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
       move_right(camera);
     }
     SDL_GetMouseState(&mouse_x, &mouse_y);
-    auto base_direction = Vector(0, 0, 1);
-    auto base_orientation = Vector(0, 1, 0);
-    auto delta_y = (mouse_y / (height / 2.f) - 1.f) * (std::numbers::pi_v<float> / 2);
-    auto delta_x = (mouse_x / (width / 2.f) - 1.f) * (std::numbers::pi_v<float> / 2);
-    auto rotation = yaw(delta_y) * pitch(delta_x);
-    camera.set_direction(rotation * base_direction);
-    camera.set_orientation(rotation * base_orientation);
-    render_gpu(scene, accelerator, texture, width, height, camera);
-//    render_cpu(scene, accelerator, texture, texture_id, width, height, camera);
+    if(!state[SDL_SCANCODE_LALT] && !state[SDL_SCANCODE_RALT]) {
+      auto base_direction = Vector(0, 0, 1);
+      auto base_orientation = Vector(0, 1, 0);
+      auto delta_y = (mouse_y / (height / 2.f) - 1.f) * (std::numbers::pi_v<float> / 2);
+      auto delta_x = (mouse_x / (width / 2.f) - 1.f) * (std::numbers::pi_v<float> / 2);
+      auto rotation = yaw(delta_y) * pitch(delta_x);
+      camera.set_direction(rotation * base_direction);
+      camera.set_orientation(rotation * base_orientation);
+    }
+//    render_gpu(scene, accelerator, texture, width, height, camera);
+    render_cpu(scene, accelerator, texture, texture_id, width, height, camera);
     glBindTexture(GL_TEXTURE_2D, texture_id);
     glBegin(GL_QUADS);
     glTexCoord2f(0.f, 0.f);
@@ -1183,8 +1185,15 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
     glVertex2f(0.f, static_cast<float>(height));
     glEnd();
     glBindTexture(GL_TEXTURE_2D, 0);
-    draw_text("Position: " + lexical_cast<std::string>(camera.get_position()),
-      12, 0, 0, SDL_Color{.g=255, .a=255});
+    auto info = "Position: " +
+      lexical_cast<std::string>(camera.get_position()) + "\n";
+    info += "Mouse: (" + lexical_cast<std::string>(mouse_x) + ", " +
+      lexical_cast<std::string>(mouse_y) + ")\n";
+    info += "Direction: " + lexical_cast<std::string>(camera.get_direction()) +
+      "\n";
+    info += "Orientation: " +
+      lexical_cast<std::string>(camera.get_orientation()) + "\n";
+    draw_text(info, 12, 0, 0, SDL_Color{.g=255, .a=255});
     SDL_GL_SwapWindow(window);
   }
   auto end = std::chrono::high_resolution_clock::now();
