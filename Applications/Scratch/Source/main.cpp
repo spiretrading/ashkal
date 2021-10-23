@@ -976,6 +976,10 @@ void render_cpu(const Scene& scene, Accelerator& accelerator,
   pixels.reserve(width * height);
   for(auto y = 0; y < height; ++y) {
     for(auto x = 0; x < width; ++x) {
+      if(x != 867 || y != 449) {
+        pixels.push_back(Color(0, 0, 0));
+        continue;
+      }
       auto direction = top_left + x * x_shift - y * y_shift;
       auto point = camera.get_position() + direction;
       auto voxel = scene.intersect(point, normalize(direction));
@@ -1120,9 +1124,14 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
   auto shape = std::make_shared<Sphere>(10, Color(255, 0, 0, 0));
   scene.add(shape);
   auto camera = Camera();
+  camera.set_position(Point(7.80101f, 9.49686f, 28.9415f));
+  camera.set_direction(Vector(0.0360509f, -0.0407541f, -0.998519f));
+  camera.set_orientation(Vector(0.f, 0.999171f, -0.0406794f));
+/*
   camera.set_position(Point(9.5f, 9.5f, 29));
   camera.set_direction(Vector(0, 0, -1));
   camera.set_orientation(Vector(0, 1, 0));
+*/
   auto running = true;
   auto event = SDL_Event();
   auto window_id = SDL_GetWindowID(window);
@@ -1163,6 +1172,7 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
     }
     SDL_GetMouseState(&mouse_x, &mouse_y);
     if(!state[SDL_SCANCODE_LALT] && !state[SDL_SCANCODE_RALT]) {
+#if 0
       auto base_direction = Vector(0, 0, 1);
       auto base_orientation = Vector(0, 1, 0);
       auto delta_y = (mouse_y / (height / 2.f) - 1.f) * (std::numbers::pi_v<float> / 2);
@@ -1170,6 +1180,7 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
       auto rotation = yaw(delta_y) * pitch(delta_x);
       camera.set_direction(rotation * base_direction);
       camera.set_orientation(rotation * base_orientation);
+#endif
     }
 //    render_gpu(scene, accelerator, texture, width, height, camera);
     render_cpu(scene, accelerator, texture, texture_id, width, height, camera);
