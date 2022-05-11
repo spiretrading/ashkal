@@ -1007,11 +1007,13 @@ auto make_shader(int width, int height) {
 }
 
 void move_forward(Camera& camera) {
-  camera.set_position(translate(camera.get_direction() / 10.f) * camera.get_position());
+  camera.set_position(
+    translate(camera.get_direction() / 10.f) * camera.get_position());
 }
 
 void move_backward(Camera& camera) {
-  camera.set_position(translate(-camera.get_direction() / 10.f) * camera.get_position());
+  camera.set_position(
+    translate(-camera.get_direction() / 10.f) * camera.get_position());
 }
 
 void move_left(Camera& camera) {
@@ -1120,16 +1122,16 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
   auto shape = std::make_shared<Sphere>(10, Color(255, 0, 0, 0));
   scene.add(shape);
   auto camera = Camera();
-  camera.set_position(Point(9.5f, 9.5f, 29));
-  camera.set_direction(Vector(0, 0, -1));
+  camera.set_position(Point(9.5f, 9.5f, -29));
+  camera.set_direction(Vector(0, 0, 1));
   camera.set_orientation(Vector(0, 1, 0));
   auto running = true;
   auto event = SDL_Event();
   auto window_id = SDL_GetWindowID(window);
   auto frames = 0;
   auto start = std::chrono::high_resolution_clock::now();
-  auto mouse_x = 0;
-  auto mouse_y = 0;
+  auto last_mouse_x = std::numeric_limits<int>::min();
+  auto last_mouse_y = std::numeric_limits<int>::min();
   while(running) {
     glClear(GL_COLOR_BUFFER_BIT);
     ++frames;
@@ -1161,16 +1163,21 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
     } else if(state[SDL_SCANCODE_D] || state[SDL_SCANCODE_RIGHT]) {
       move_right(camera);
     }
+    auto mouse_x = 0;
+    auto mouse_y = 0;
     SDL_GetMouseState(&mouse_x, &mouse_y);
-    if(!state[SDL_SCANCODE_LALT] && !state[SDL_SCANCODE_RALT]) {
+    if(last_mouse_x != std::numeric_limits<int>::min() &&
+        !state[SDL_SCANCODE_LALT] && !state[SDL_SCANCODE_RALT]) {
       auto base_direction = Vector(0, 0, 1);
       auto base_orientation = Vector(0, 1, 0);
-      auto delta_y = (mouse_y / (height / 2.f) - 1.f) * (std::numbers::pi_v<float> / 2);
-      auto delta_x = (mouse_x / (width / 2.f) - 1.f) * (std::numbers::pi_v<float> / 2);
+      auto delta_y = ((mouse_y - last_mouse_y) / (height / 2.f)) * (std::numbers::pi_v<float> / 2);
+      auto delta_x = ((mouse_x - last_mouse_x) / (width / 2.f)) * (std::numbers::pi_v<float> / 2);
       auto rotation = yaw(delta_y) * pitch(delta_x);
-      camera.set_direction(rotation * base_direction);
-      camera.set_orientation(rotation * base_orientation);
+      camera.set_direction(rotation * camera.get_direction());
+      camera.set_orientation(rotation * camera.get_orientation());
     }
+    last_mouse_x = mouse_x;
+    last_mouse_y = mouse_y;
     render_gpu(scene, accelerator, texture, width, height, camera);
 //    render_cpu(scene, accelerator, texture, texture_id, width, height, camera);
     glBindTexture(GL_TEXTURE_2D, texture_id);
