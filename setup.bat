@@ -92,7 +92,7 @@ IF NOT EXIST SDL2_ttf-2.0.15 (
   sed -i "/^add_library/i include_directories(${FREETYPE_INCLUDE_DIRS})" CMakeLists.txt
   mkdir build
   PUSHD build
-  cmake -DCMAKE_INSTALL_PREFIX=!ROOT!\SDL2_ttf-2.0.15\build -DSDL2_DIR=!ROOT!\SDL2-2.0.16\build -DFREETYPE_LIBRARY=!ROOT!\freetype-2.9.1\build\Release\ -DFREETYPE_INCLUDE_DIRS=!ROOT!\freetype-2.9.1\include\ ..
+  cmake -DCMAKE_INSTALL_PREFIX=!ROOT!\SDL2_ttf-2.0.15\build -DSDL2_DIR=!ROOT!\SDL2-2.0.16\cmake -DFREETYPE_LIBRARY=!ROOT!\freetype-2.9.1\build\Release\ -DFREETYPE_INCLUDE_DIRS=!ROOT!\freetype-2.9.1\include\ ..
   cmake --build . --target INSTALL --config Debug
   cmake --build . --target INSTALL --config Release
   POPD
@@ -104,21 +104,21 @@ IF "%NUMBER_OF_PROCESSORS%" == "" (
 ) ELSE (
   SET BJAM_PROCESSORS="-j%NUMBER_OF_PROCESSORS%"
 )
-IF NOT EXIST boost_1_77_0 (
-  wget https://boostorg.jfrog.io/artifactory/main/release/1.77.0/source/boost_1_77_0.zip -O boost_1_77_0.zip
+IF NOT EXIST boost_1_81_0 (
+  wget https://boostorg.jfrog.io/artifactory/main/release/1.81.0/source/boost_1_81_0.zip -O boost_1_81_0.zip --no-check-certificate
   IF !ERRORLEVEL! LEQ 0 (
-    tar -xf boost_1_77_0.zip
-    PUSHD boost_1_77_0
+    tar -xf boost_1_81_0.zip
+    PUSHD boost_1_81_0
     PUSHD tools\build
-    CALL bootstrap.bat vc142
+    CALL bootstrap.bat vc143
     POPD
-    tools\build\b2 !BJAM_PROCESSORS! --without-context --prefix="!ROOT!\boost_1_77_0" --build-type=complete address-model=64 toolset=msvc-14.2 link=static,shared runtime-link=shared install
-    tools\build\b2 !BJAM_PROCESSORS! --with-context --prefix="!ROOT!\boost_1_77_0" --build-type=complete address-model=64 toolset=msvc-14.2 link=static runtime-link=shared install
+    tools\build\b2 !BJAM_PROCESSORS! --without-context --prefix="!ROOT!\boost_1_81_0" --build-type=complete address-model=64 toolset=msvc-14.3 link=static,shared runtime-link=shared install
+    tools\build\b2 !BJAM_PROCESSORS! --with-context --prefix="!ROOT!\boost_1_81_0" --build-type=complete address-model=64 toolset=msvc-14.3 link=static runtime-link=shared install
     POPD
   ) ELSE (
     SET EXIT_STATUS=1
   )
-  DEL /F /Q boost_1_77_0.zip
+  DEL /F /Q boost_1_81_0.zip
 )
 IF NOT EXIST cache_files (
   MD cache_files

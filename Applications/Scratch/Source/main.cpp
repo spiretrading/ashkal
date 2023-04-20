@@ -12,8 +12,14 @@
 #include <boost/compute/interop/opengl/acquire.hpp>
 #include <boost/compute/interop/opengl/context.hpp>
 #include <boost/compute/interop/opengl/opengl_texture.hpp>
+#include "Ashkal/Camera.hpp"
+#include "Ashkal/Color.hpp"
+#include "Ashkal/Matrix.hpp"
+#include "Ashkal/Point.hpp"
+#include "Ashkal/Vector.hpp"
 #include "Version.hpp"
 
+using namespace Ashkal;
 using namespace boost;
 
 struct Accelerator {
@@ -24,34 +30,6 @@ struct Accelerator {
     : m_context(compute::opengl_create_shared_context()),
       m_queue(m_context, m_context.get_device()) {}
 };
-
-struct Color {
-  std::uint8_t m_red;
-  std::uint8_t m_green;
-  std::uint8_t m_blue;
-  std::uint8_t m_alpha;
-
-  friend auto operator <=>(const Color&, const Color&) = default;
-};
-
-std::ostream& operator <<(std::ostream& out, Color color) {
-  return out << "Color(" << static_cast<int>(color.m_red) << ", " <<
-    static_cast<int>(color.m_green) << ", " << static_cast<int>(color.m_blue) <<
-    ", " << static_cast<int>(color.m_alpha) << ')';
-}
-
-struct Point {
-  float m_x;
-  float m_y;
-  float m_z;
-
-  friend auto operator <=>(const Point&, const Point&) = default;
-};
-
-std::ostream& operator <<(std::ostream& out, Point point) {
-  return out <<
-    "Point(" << point.m_x << ", " << point.m_y << ", " << point.m_z << ')';
-}
 
 struct Voxel {
   constexpr static Voxel NONE() {
@@ -66,249 +44,6 @@ struct Voxel {
 std::ostream& operator <<(std::ostream& out, Voxel voxel) {
   return out <<
     "Voxel(" << voxel.m_color << ')';
-}
-
-struct Vector {
-  float m_x;
-  float m_y;
-  float m_z;
-};
-
-std::ostream& operator <<(std::ostream& out, Vector vector) {
-  return out <<
-    "Vector(" << vector.m_x << ", " << vector.m_y << ", " << vector.m_z << ')';
-}
-
-Vector operator -(Vector vector) {
-  return Vector(-vector.m_x, -vector.m_y, -vector.m_z);
-}
-
-Vector operator -(Point left, Point right) {
-  return Vector(
-    left.m_x - right.m_x, left.m_y - right.m_y, left.m_z - right.m_z);
-}
-
-Vector operator -(Vector left, Vector right) {
-  return Vector(
-    left.m_x - right.m_x, left.m_y - right.m_y, left.m_z - right.m_z);
-}
-
-Vector operator +(Vector left, Vector right) {
-  return Vector(
-    left.m_x + right.m_x, left.m_y + right.m_y, left.m_z + right.m_z);
-}
-
-Vector operator *(int left, Vector right) {
-  return Vector(left * right.m_x, left * right.m_y, left * right.m_z);
-}
-
-Vector operator *(float left, Vector right) {
-  return Vector(left * right.m_x, left * right.m_y, left * right.m_z);
-}
-
-Vector operator /(Vector left, int right) {
-  return Vector(left.m_x / right, left.m_y / right, left.m_z / right);
-}
-
-Vector operator /(Vector left, float right) {
-  return Vector(left.m_x / right, left.m_y / right, left.m_z / right);
-}
-
-Point operator +(Point left, Vector right) {
-  return Point(
-    left.m_x + right.m_x, left.m_y + right.m_y, left.m_z + right.m_z);
-}
-
-Point operator -(Point left, Vector right) {
-  return left + -right;
-}
-
-struct Matrix {
-  static constexpr auto WIDTH = 4;
-  static constexpr auto HEIGHT = 4;
-
-  std::array<float, WIDTH * HEIGHT> m_elements;
-
-  static const Matrix& IDENTITY() {
-    static auto identity = [] {
-      auto identity = Matrix();
-      identity.set(0, 0, 1);
-      identity.set(1, 1, 1);
-      identity.set(2, 2, 1);
-      identity.set(3, 3, 1);
-      return identity;
-    }();
-    return identity;
-  }
-
-  float get(int x, int y) const {
-    return m_elements[x + WIDTH * y];
-  }
-
-  void set(int x, int y, float value) {
-    m_elements[x + WIDTH * y] = value;
-  }
-};
-
-Matrix operator +(Matrix left, const Matrix& right) {
-  for(auto i = std::size_t(0); i != left.m_elements.size(); ++i) {
-    left.m_elements[i] += right.m_elements[i];
-  }
-  return left;
-}
-
-Matrix operator -(Matrix left, const Matrix& right) {
-  for(auto i = std::size_t(0); i != left.m_elements.size(); ++i) {
-    left.m_elements[i] -= right.m_elements[i];
-  }
-  return left;
-}
-
-Matrix operator *(Matrix left, const Matrix& right) {
-  for(auto y = 0; y != Matrix::HEIGHT; ++y) {
-    for(auto x = 0; x != Matrix::WIDTH; ++x) {
-      auto e = 0.f;
-      for(auto z = 0; z != Matrix::HEIGHT; ++z) {
-        e += left.get(z, y) * right.get(x, z);
-      }
-      left.set(x, y, e);
-    }
-  }
-  return left;
-}
-
-Point operator *(const Matrix& left, Point right) {
-  auto get = [&] (int x) {
-    if(x == 0) {
-      return right.m_x;
-    } else if(x == 1) {
-      return right.m_y;
-    } else if(x == 2) {
-      return right.m_z;
-    }
-    return 1.f;
-  };
-  auto set = [&] (int x, float v) {
-    if(x == 0) {
-      right.m_x = v;
-    } else if(x == 1) {
-      right.m_y = v;
-    } else if(x == 2) {
-      right.m_z = v;
-    }
-  };
-  for(auto y = 0; y != Matrix::HEIGHT; ++y) {
-    auto e = 0.f;
-    for(auto x = 0; x != Matrix::WIDTH; ++x) {
-      e += left.get(x, y) * get(x);
-    }
-    set(y, e);
-  }
-  return right;
-}
-
-Vector operator *(const Matrix& left, Vector right) {
-  auto get = [&] (int x) {
-    if(x == 0) {
-      return right.m_x;
-    } else if(x == 1) {
-      return right.m_y;
-    } else if(x == 2) {
-      return right.m_z;
-    }
-    return 1.f;
-  };
-  auto set = [&] (int x, float v) {
-    if(x == 0) {
-      right.m_x = v;
-    } else if(x == 1) {
-      right.m_y = v;
-    } else if(x == 2) {
-      right.m_z = v;
-    }
-  };
-  for(auto y = 0; y != Matrix::HEIGHT; ++y) {
-    auto e = 0.f;
-    for(auto x = 0; x != Matrix::WIDTH; ++x) {
-      e += left.get(x, y) * get(x);
-    }
-    set(y, e);
-  }
-  return right;
-}
-
-Matrix translate(Vector offset) {
-  auto translation = Matrix::IDENTITY();
-  translation.set(3, 0, offset.m_x);
-  translation.set(3, 1, offset.m_y);
-  translation.set(3, 2, offset.m_z);
-  return translation;
-}
-
-Matrix pitch(float radians) {
-  auto transform = Matrix();
-  transform.set(0, 0, cos(radians));
-  transform.set(1, 0, 0);
-  transform.set(2, 0, sin(radians));
-  transform.set(3, 0, 0);
-  transform.set(0, 1, 0);
-  transform.set(1, 1, 1);
-  transform.set(2, 1, 0);
-  transform.set(3, 1, 0);
-  transform.set(0, 2, -sin(radians));
-  transform.set(1, 2, 0);
-  transform.set(2, 2, cos(radians));
-  transform.set(3, 2, 0);
-  transform.set(0, 3, 0);
-  transform.set(1, 3, 0);
-  transform.set(2, 3, 0);
-  transform.set(3, 3, 1);
-  return transform;
-}
-
-Matrix yaw(float radians) {
-  auto transform = Matrix();
-  transform.set(0, 0, 1);
-  transform.set(1, 0, 0);
-  transform.set(2, 0, 0);
-  transform.set(3, 0, 0);
-  transform.set(0, 1, 0);
-  transform.set(1, 1, cos(radians));
-  transform.set(2, 1, -sin(radians));
-  transform.set(3, 1, 0);
-  transform.set(0, 2, 0);
-  transform.set(1, 2, sin(radians));
-  transform.set(2, 2, cos(radians));
-  transform.set(3, 2, 0);
-  transform.set(0, 3, 0);
-  transform.set(1, 3, 0);
-  transform.set(2, 3, 0);
-  transform.set(3, 3, 1);
-  return transform;
-}
-
-Point floor(Point point) {
-  return Point(
-    std::floor(point.m_x), std::floor(point.m_y), std::floor(point.m_z));
-}
-
-Vector cross(Vector left, Vector right) {
-  return Vector(left.m_y * right.m_z - left.m_z * right.m_y,
-    left.m_z * right.m_x - left.m_x * right.m_z,
-    left.m_x * right.m_y - left.m_y * right.m_x);
-}
-
-float dot(Vector left, Vector right) {
-  return left.m_x * right.m_x + left.m_y * right.m_y + left.m_z * right.m_z;
-}
-
-float magnitude(Vector vector) {
-  return std::sqrt(vector.m_x * vector.m_x +
-    vector.m_y * vector.m_y + vector.m_z * vector.m_z);
-}
-
-Vector normalize(Vector vector) {
-  return vector / magnitude(vector);
 }
 
 struct Ray {
@@ -365,12 +100,6 @@ Point compute_boundary(const Ray& ray, Point start, int size) {
     }
   }
   return point_at(ray, t);
-}
-
-bool contains(Point start, Point end, Point point) {
-  return point.m_x >= start.m_x && point.m_x < end.m_x &&
-    point.m_y >= start.m_y && point.m_y < end.m_y &&
-    point.m_z >= start.m_z && point.m_z < end.m_z;
 }
 
 class Model {
@@ -641,38 +370,6 @@ class Scene {
 
   private:
     OctreeInternalNode m_root;
-};
-
-class Camera {
-  public:
-    Point get_position() const {
-      return m_position;
-    }
-
-    void set_position(Point position) {
-      m_position = position;
-    }
-
-    Vector get_direction() const {
-      return m_direction;
-    }
-
-    void set_direction(Vector direction) {
-      m_direction = direction / magnitude(direction);
-    }
-
-    Vector get_orientation() const {
-      return m_orientation;
-    }
-
-    void set_orientation(Vector orientation) {
-      m_orientation = orientation;
-    }
-
-  private:
-    Point m_position;
-    Vector m_direction;
-    Vector m_orientation;
 };
 
 BOOST_COMPUTE_ADAPT_STRUCT(Color, Color, (m_red, m_green, m_blue, m_alpha));
@@ -1006,26 +703,6 @@ auto make_shader(int width, int height) {
   return texture_id;
 }
 
-void move_forward(Camera& camera) {
-  camera.set_position(
-    translate(camera.get_direction() / 10.f) * camera.get_position());
-}
-
-void move_backward(Camera& camera) {
-  camera.set_position(
-    translate(-camera.get_direction() / 10.f) * camera.get_position());
-}
-
-void move_left(Camera& camera) {
-  auto roll = cross(camera.get_orientation(), camera.get_direction());
-  camera.set_position(translate(-roll / 10.f) * camera.get_position());
-}
-
-void move_right(Camera& camera) {
-  auto roll = cross(camera.get_orientation(), camera.get_direction());
-  camera.set_position(translate(roll / 10.f) * camera.get_position());
-}
-
 auto render_text(const std::string& message, SDL_Color color, int font_size) {
   auto texture = GLuint(0);
   auto font = TTF_OpenFont("C:\\Windows\\Fonts\\arial.ttf", font_size);
@@ -1154,27 +831,23 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
     }
     auto state = SDL_GetKeyboardState(nullptr);
     if(state[SDL_SCANCODE_W] || state[SDL_SCANCODE_UP]) {
-      move_forward(camera);
+      move_forward(camera, 1 / 10.f);
     } else if(state[SDL_SCANCODE_S] || state[SDL_SCANCODE_DOWN]) {
-      move_backward(camera);
+      move_backward(camera, 1 / 10.f);
     }
     if(state[SDL_SCANCODE_A] || state[SDL_SCANCODE_LEFT]) {
-      move_left(camera);
+      move_left(camera, 1 / 10.f);
     } else if(state[SDL_SCANCODE_D] || state[SDL_SCANCODE_RIGHT]) {
-      move_right(camera);
+      move_right(camera, 1 / 10.f);
     }
     auto mouse_x = 0;
     auto mouse_y = 0;
     SDL_GetMouseState(&mouse_x, &mouse_y);
     if(last_mouse_x != std::numeric_limits<int>::min() &&
         !state[SDL_SCANCODE_LALT] && !state[SDL_SCANCODE_RALT]) {
-      auto base_direction = Vector(0, 0, 1);
-      auto base_orientation = Vector(0, 1, 0);
       auto delta_y = ((mouse_y - last_mouse_y) / (height / 2.f)) * (std::numbers::pi_v<float> / 2);
       auto delta_x = ((mouse_x - last_mouse_x) / (width / 2.f)) * (std::numbers::pi_v<float> / 2);
-      auto rotation = yaw(delta_y) * pitch(delta_x);
-      camera.set_direction(rotation * camera.get_direction());
-      camera.set_orientation(rotation * camera.get_orientation());
+      tilt(camera, delta_x, delta_y);
     }
     last_mouse_x = mouse_x;
     last_mouse_y = mouse_y;

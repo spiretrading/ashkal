@@ -1,7 +1,7 @@
 set(BOOST_INCLUDE_PATH
-  "${PROJECT_BINARY_DIR}/Dependencies/boost_1_77_0/include/boost-1_77")
-set(BOOST_DEBUG_PATH "${PROJECT_BINARY_DIR}/Dependencies/boost_1_77_0/lib")
-set(BOOST_OPTIMIZED_PATH "${PROJECT_BINARY_DIR}/Dependencies/boost_1_77_0/lib")
+  "${PROJECT_BINARY_DIR}/Dependencies/boost_1_81_0/include/boost-1_81")
+set(BOOST_DEBUG_PATH "${PROJECT_BINARY_DIR}/Dependencies/boost_1_81_0/lib")
+set(BOOST_OPTIMIZED_PATH "${PROJECT_BINARY_DIR}/Dependencies/boost_1_81_0/lib")
 set(FREETYPE_INCLUDE_PATH "${PROJECT_BINARY_DIR}/Dependencies/freetype-2.9.1/include")
 set(FREETYPE_LIBRARY_DEBUG_PATH
   "${PROJECT_BINARY_DIR}/Dependencies/freetype-2.9.1/build/Debug/freetyped.lib")
