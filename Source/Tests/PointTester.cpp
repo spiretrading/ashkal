@@ -1,5 +1,4 @@
 #include <doctest/doctest.h>
-#include <cmath>
 #include <sstream>
 #include "Ashkal/Point.hpp"
 
