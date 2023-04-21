@@ -1,6 +1,7 @@
 #ifndef ASHKAL_MATRIX_HPP
 #define ASHKAL_MATRIX_HPP
 #include <array>
+#include <cmath>
 #include <ostream>
 #include "Ashkal/Ashkal.hpp"
 #include "Ashkal/Point.hpp"
@@ -179,7 +180,7 @@ namespace Ashkal {
     return result;
   }
 
-  inline Point operator *(const Matrix& left, Point right) {
+  inline Point operator *(const Matrix& left, const Point& right) {
     auto get = [&] (int x) {
       if(x == 0) {
         return right.m_x;
@@ -190,13 +191,14 @@ namespace Ashkal {
       }
       return 1.f;
     };
+    auto result = Point();
     auto set = [&] (int x, float v) {
       if(x == 0) {
-        right.m_x = v;
+        result.m_x = v;
       } else if(x == 1) {
-        right.m_y = v;
+        result.m_y = v;
       } else if(x == 2) {
-        right.m_z = v;
+        result.m_z = v;
       }
     };
     for(auto y = 0; y != Matrix::HEIGHT; ++y) {
@@ -206,10 +208,11 @@ namespace Ashkal {
       }
       set(y, e);
     }
-    return right;
+    return result;
   }
 
-  inline Vector operator *(const Matrix& left, Vector right) {
+  inline Vector operator *(const Matrix& left, const Vector& right) {
+    auto result = Vector();
     auto get = [&] (int x) {
       if(x == 0) {
         return right.m_x;
@@ -222,11 +225,11 @@ namespace Ashkal {
     };
     auto set = [&] (int x, float v) {
       if(x == 0) {
-        right.m_x = v;
+        result.m_x = v;
       } else if(x == 1) {
-        right.m_y = v;
+        result.m_y = v;
       } else if(x == 2) {
-        right.m_z = v;
+        result.m_z = v;
       }
     };
     for(auto y = 0; y != Matrix::HEIGHT; ++y) {
@@ -236,7 +239,7 @@ namespace Ashkal {
       }
       set(y, e);
     }
-    return right;
+    return result;
   }
 
   inline Matrix translate(Vector offset) {
@@ -249,19 +252,19 @@ namespace Ashkal {
 
   inline Matrix pitch(float radians) {
     auto transform = Matrix::IDENTITY();
-    transform.set(1, 1, cos(radians));
-    transform.set(1, 2, -sin(radians));
-    transform.set(2, 1, sin(radians));
-    transform.set(2, 2, cos(radians));
+    transform.set(1, 1, std::cos(radians));
+    transform.set(2, 1, -std::sin(radians));
+    transform.set(1, 2, std::sin(radians));
+    transform.set(2, 2, std::cos(radians));
     return transform;
   }
 
   inline Matrix yaw(float radians) {
     auto transform = Matrix::IDENTITY();
-    transform.set(0, 0, cos(radians));
-    transform.set(0, 2, sin(radians));
-    transform.set(2, 0, -sin(radians));
-    transform.set(2, 2, cos(radians));
+    transform.set(0, 0, std::cos(radians));
+    transform.set(0, 2, std::sin(radians));
+    transform.set(2, 0, -std::sin(radians));
+    transform.set(2, 2, std::cos(radians));
     return transform;
   }
 

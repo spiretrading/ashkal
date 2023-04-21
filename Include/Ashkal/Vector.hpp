@@ -1,5 +1,6 @@
 #ifndef ASHKAL_VECTOR_HPP
 #define ASHKAL_VECTOR_HPP
+#include <cmath>
 #include <ostream>
 #include "Ashkal/Ashkal.hpp"
 #include "Ashkal/Point.hpp"

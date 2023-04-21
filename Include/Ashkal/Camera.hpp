@@ -58,9 +58,6 @@ namespace Ashkal {
   inline void tilt(Camera& camera, float tilt_x, float tilt_y) {
     auto& world_to_view = camera.get_world_to_view();
     auto view_to_world = invert(world_to_view);
-    std::cout << world_to_view << std::endl;
-    std::cout << view_to_world << std::endl;
-    std::cout << view_to_world * world_to_view << std::endl;
     camera.apply(yaw(tilt_x) * pitch(tilt_y) * view_to_world);
     camera.apply(world_to_view);
   }
