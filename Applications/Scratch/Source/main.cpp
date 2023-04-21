@@ -845,8 +845,8 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
     SDL_GetMouseState(&mouse_x, &mouse_y);
     if(last_mouse_x != std::numeric_limits<int>::min() &&
         !state[SDL_SCANCODE_LALT] && !state[SDL_SCANCODE_RALT]) {
-      auto delta_y = ((mouse_y - last_mouse_y) / (height / 2.f)) * (std::numbers::pi_v<float> / 2);
       auto delta_x = ((mouse_x - last_mouse_x) / (width / 2.f)) * (std::numbers::pi_v<float> / 2);
+      auto delta_y = ((mouse_y - last_mouse_y) / (height / 2.f)) * (std::numbers::pi_v<float> / 2);
       tilt(camera, delta_x, delta_y);
     }
     last_mouse_x = mouse_x;

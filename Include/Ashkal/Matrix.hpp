@@ -1,6 +1,7 @@
 #ifndef ASHKAL_MATRIX_HPP
 #define ASHKAL_MATRIX_HPP
 #include <array>
+#include <ostream>
 #include "Ashkal/Ashkal.hpp"
 #include "Ashkal/Point.hpp"
 #include "Ashkal/Vector.hpp"
@@ -20,10 +21,136 @@ namespace Ashkal {
     private:
       std::array<float, WIDTH * HEIGHT> m_elements;
 
+      friend Matrix invert(const Matrix& matrix);
       friend Matrix operator +(Matrix left, const Matrix& right);
       friend Matrix operator -(Matrix left, const Matrix& right);
       friend Matrix operator *(Matrix left, const Matrix& right);
   };
+
+  inline Matrix invert(const Matrix& matrix) {
+    auto inverse = Matrix();
+    inverse.m_elements[0] =
+      matrix.m_elements[5] * matrix.m_elements[10] * matrix.m_elements[15] -
+      matrix.m_elements[5] * matrix.m_elements[11] * matrix.m_elements[14] -
+      matrix.m_elements[9] * matrix.m_elements[6] * matrix.m_elements[15] +
+      matrix.m_elements[9] * matrix.m_elements[7] * matrix.m_elements[14] +
+      matrix.m_elements[13] * matrix.m_elements[6] * matrix.m_elements[11] -
+      matrix.m_elements[13] * matrix.m_elements[7] * matrix.m_elements[10];
+    inverse.m_elements[4] =
+      -matrix.m_elements[4] * matrix.m_elements[10] * matrix.m_elements[15] +
+      matrix.m_elements[4] * matrix.m_elements[11] * matrix.m_elements[14] +
+      matrix.m_elements[8] * matrix.m_elements[6] * matrix.m_elements[15] -
+      matrix.m_elements[8] * matrix.m_elements[7] * matrix.m_elements[14] -
+      matrix.m_elements[12] * matrix.m_elements[6] * matrix.m_elements[11] +
+      matrix.m_elements[12] * matrix.m_elements[7] * matrix.m_elements[10];
+    inverse.m_elements[8] =
+      matrix.m_elements[4] * matrix.m_elements[9] * matrix.m_elements[15] -
+      matrix.m_elements[4] * matrix.m_elements[11] * matrix.m_elements[13] -
+      matrix.m_elements[8] * matrix.m_elements[5] * matrix.m_elements[15] +
+      matrix.m_elements[8] * matrix.m_elements[7] * matrix.m_elements[13] +
+      matrix.m_elements[12] * matrix.m_elements[5] * matrix.m_elements[11] -
+      matrix.m_elements[12] * matrix.m_elements[7] * matrix.m_elements[9];
+    inverse.m_elements[12] =
+      -matrix.m_elements[4] * matrix.m_elements[9] * matrix.m_elements[14] +
+      matrix.m_elements[4] * matrix.m_elements[10] * matrix.m_elements[13] +
+      matrix.m_elements[8] * matrix.m_elements[5] * matrix.m_elements[14] -
+      matrix.m_elements[8] * matrix.m_elements[6] * matrix.m_elements[13] -
+      matrix.m_elements[12] * matrix.m_elements[5] * matrix.m_elements[10] +
+      matrix.m_elements[12] * matrix.m_elements[6] * matrix.m_elements[9];
+    inverse.m_elements[1] =
+      -matrix.m_elements[1] * matrix.m_elements[10] * matrix.m_elements[15] +
+      matrix.m_elements[1] * matrix.m_elements[11] * matrix.m_elements[14] +
+      matrix.m_elements[9] * matrix.m_elements[2] * matrix.m_elements[15] -
+      matrix.m_elements[9] * matrix.m_elements[3] * matrix.m_elements[14] -
+      matrix.m_elements[13] * matrix.m_elements[2] * matrix.m_elements[11] +
+      matrix.m_elements[13] * matrix.m_elements[3] * matrix.m_elements[10];
+    inverse.m_elements[5] =
+      matrix.m_elements[0] * matrix.m_elements[10] * matrix.m_elements[15] -
+      matrix.m_elements[0] * matrix.m_elements[11] * matrix.m_elements[14] -
+      matrix.m_elements[8] * matrix.m_elements[2] * matrix.m_elements[15] +
+      matrix.m_elements[8] * matrix.m_elements[3] * matrix.m_elements[14] +
+      matrix.m_elements[12] * matrix.m_elements[2] * matrix.m_elements[11] -
+      matrix.m_elements[12] * matrix.m_elements[3] * matrix.m_elements[10];
+    inverse.m_elements[9] =
+      -matrix.m_elements[0] * matrix.m_elements[9] * matrix.m_elements[15] +
+      matrix.m_elements[0] * matrix.m_elements[11] * matrix.m_elements[13] +
+      matrix.m_elements[8] * matrix.m_elements[1] * matrix.m_elements[15] -
+      matrix.m_elements[8] * matrix.m_elements[3] * matrix.m_elements[13] -
+      matrix.m_elements[12] * matrix.m_elements[1] * matrix.m_elements[11] +
+      matrix.m_elements[12] * matrix.m_elements[3] * matrix.m_elements[9];
+    inverse.m_elements[13] =
+      matrix.m_elements[0] * matrix.m_elements[9] * matrix.m_elements[14] -
+      matrix.m_elements[0] * matrix.m_elements[10] * matrix.m_elements[13] -
+      matrix.m_elements[8] * matrix.m_elements[1] * matrix.m_elements[14] +
+      matrix.m_elements[8] * matrix.m_elements[2] * matrix.m_elements[13] +
+      matrix.m_elements[12] * matrix.m_elements[1] * matrix.m_elements[10] -
+      matrix.m_elements[12] * matrix.m_elements[2] * matrix.m_elements[9];
+    inverse.m_elements[2] =
+      matrix.m_elements[1] * matrix.m_elements[6] * matrix.m_elements[15] -
+      matrix.m_elements[1] * matrix.m_elements[7] * matrix.m_elements[14] -
+      matrix.m_elements[5] * matrix.m_elements[2] * matrix.m_elements[15] +
+      matrix.m_elements[5] * matrix.m_elements[3] * matrix.m_elements[14] +
+      matrix.m_elements[13] * matrix.m_elements[2] * matrix.m_elements[7] -
+      matrix.m_elements[13] * matrix.m_elements[3] * matrix.m_elements[6];
+    inverse.m_elements[6] =
+      -matrix.m_elements[0] * matrix.m_elements[6] * matrix.m_elements[15] +
+      matrix.m_elements[0] * matrix.m_elements[7] * matrix.m_elements[14] +
+      matrix.m_elements[4] * matrix.m_elements[2] * matrix.m_elements[15] -
+      matrix.m_elements[4] * matrix.m_elements[3] * matrix.m_elements[14] -
+      matrix.m_elements[12] * matrix.m_elements[2] * matrix.m_elements[7] +
+      matrix.m_elements[12] * matrix.m_elements[3] * matrix.m_elements[6];
+    inverse.m_elements[10] =
+      matrix.m_elements[0] * matrix.m_elements[5] * matrix.m_elements[15] -
+      matrix.m_elements[0] * matrix.m_elements[7] * matrix.m_elements[13] -
+      matrix.m_elements[4] * matrix.m_elements[1] * matrix.m_elements[15] +
+      matrix.m_elements[4] * matrix.m_elements[3] * matrix.m_elements[13] +
+      matrix.m_elements[12] * matrix.m_elements[1] * matrix.m_elements[7] -
+      matrix.m_elements[12] * matrix.m_elements[3] * matrix.m_elements[5];
+    inverse.m_elements[14] =
+      -matrix.m_elements[0] * matrix.m_elements[5] * matrix.m_elements[14] +
+      matrix.m_elements[0] * matrix.m_elements[6] * matrix.m_elements[13] +
+      matrix.m_elements[4] * matrix.m_elements[1] * matrix.m_elements[14] -
+      matrix.m_elements[4] * matrix.m_elements[2] * matrix.m_elements[13] -
+      matrix.m_elements[12] * matrix.m_elements[1] * matrix.m_elements[6] +
+      matrix.m_elements[12] * matrix.m_elements[2] * matrix.m_elements[5];
+    inverse.m_elements[3] =
+      -matrix.m_elements[1] * matrix.m_elements[6] * matrix.m_elements[11] +
+      matrix.m_elements[1] * matrix.m_elements[7] * matrix.m_elements[10] +
+      matrix.m_elements[5] * matrix.m_elements[2] * matrix.m_elements[11] -
+      matrix.m_elements[5] * matrix.m_elements[3] * matrix.m_elements[10] -
+      matrix.m_elements[9] * matrix.m_elements[2] * matrix.m_elements[7] +
+      matrix.m_elements[9] * matrix.m_elements[3] * matrix.m_elements[6];
+    inverse.m_elements[7] =
+      matrix.m_elements[0] * matrix.m_elements[6] * matrix.m_elements[11] -
+      matrix.m_elements[0] * matrix.m_elements[7] * matrix.m_elements[10] -
+      matrix.m_elements[4] * matrix.m_elements[2] * matrix.m_elements[11] +
+      matrix.m_elements[4] * matrix.m_elements[3] * matrix.m_elements[10] +
+      matrix.m_elements[8] * matrix.m_elements[2] * matrix.m_elements[7] -
+      matrix.m_elements[8] * matrix.m_elements[3] * matrix.m_elements[6];
+    inverse.m_elements[11] =
+      -matrix.m_elements[0] * matrix.m_elements[5] * matrix.m_elements[11] +
+      matrix.m_elements[0] * matrix.m_elements[7] * matrix.m_elements[9] +
+      matrix.m_elements[4] * matrix.m_elements[1] * matrix.m_elements[11] -
+      matrix.m_elements[4] * matrix.m_elements[3] * matrix.m_elements[9] -
+      matrix.m_elements[8] * matrix.m_elements[1] * matrix.m_elements[7] +
+      matrix.m_elements[8] * matrix.m_elements[3] * matrix.m_elements[5];
+    inverse.m_elements[15] =
+      matrix.m_elements[0] * matrix.m_elements[5] * matrix.m_elements[10] -
+      matrix.m_elements[0] * matrix.m_elements[6] * matrix.m_elements[9] -
+      matrix.m_elements[4] * matrix.m_elements[1] * matrix.m_elements[10] +
+      matrix.m_elements[4] * matrix.m_elements[2] * matrix.m_elements[9] +
+      matrix.m_elements[8] * matrix.m_elements[1] * matrix.m_elements[6] -
+      matrix.m_elements[8] * matrix.m_elements[2] * matrix.m_elements[5];
+    auto determinant =
+      matrix.m_elements[0] * inverse.m_elements[0] + matrix.m_elements[1] *
+        inverse.m_elements[4] + matrix.m_elements[2] * inverse.m_elements[8] +
+          matrix.m_elements[3] * inverse.m_elements[12];
+    determinant = 1.0f / determinant;
+    for(auto& element : inverse.m_elements) {
+      element *= determinant;
+    }
+    return inverse;
+  }
 
   inline Matrix operator +(Matrix left, const Matrix& right) {
     for(auto i = std::size_t(0); i != left.m_elements.size(); ++i) {
@@ -121,45 +248,40 @@ namespace Ashkal {
   }
 
   inline Matrix pitch(float radians) {
-    auto transform = Matrix();
-    transform.set(0, 0, cos(radians));
-    transform.set(1, 0, 0);
-    transform.set(2, 0, sin(radians));
-    transform.set(3, 0, 0);
-    transform.set(0, 1, 0);
-    transform.set(1, 1, 1);
-    transform.set(2, 1, 0);
-    transform.set(3, 1, 0);
-    transform.set(0, 2, -sin(radians));
-    transform.set(1, 2, 0);
+    auto transform = Matrix::IDENTITY();
+    transform.set(1, 1, cos(radians));
+    transform.set(1, 2, -sin(radians));
+    transform.set(2, 1, sin(radians));
     transform.set(2, 2, cos(radians));
-    transform.set(3, 2, 0);
-    transform.set(0, 3, 0);
-    transform.set(1, 3, 0);
-    transform.set(2, 3, 0);
-    transform.set(3, 3, 1);
     return transform;
   }
 
   inline Matrix yaw(float radians) {
-    auto transform = Matrix();
-    transform.set(0, 0, 1);
-    transform.set(1, 0, 0);
-    transform.set(2, 0, 0);
-    transform.set(3, 0, 0);
-    transform.set(0, 1, 0);
-    transform.set(1, 1, cos(radians));
-    transform.set(2, 1, -sin(radians));
-    transform.set(3, 1, 0);
-    transform.set(0, 2, 0);
-    transform.set(1, 2, sin(radians));
+    auto transform = Matrix::IDENTITY();
+    transform.set(0, 0, cos(radians));
+    transform.set(0, 2, sin(radians));
+    transform.set(2, 0, -sin(radians));
     transform.set(2, 2, cos(radians));
-    transform.set(3, 2, 0);
-    transform.set(0, 3, 0);
-    transform.set(1, 3, 0);
-    transform.set(2, 3, 0);
-    transform.set(3, 3, 1);
     return transform;
+  }
+
+  inline std::ostream& operator <<(std::ostream& out, const Matrix& matrix) {
+    out << "Matrix(";
+    for(auto y = 0; y != Matrix::HEIGHT; ++y) {
+      if(y != 0) {
+        out << ", ";
+      }
+      out << '(';
+      for(auto x = 0; x != Matrix::WIDTH; ++x) {
+        if(x != 0) {
+          out << ", ";
+        }
+        out << matrix.get(x, y);
+      }
+      out << ')';
+    }
+    out << ')';
+    return out;
   }
 
   inline const Matrix& Matrix::IDENTITY() {

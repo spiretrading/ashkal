@@ -18,6 +18,12 @@ namespace Ashkal {
     /** The vector's z-component. */
     float m_z;
 
+    Vector();
+
+    Vector(float x, float y, float z);
+
+    explicit Vector(Point point);
+
     bool operator ==(const Vector&) const = default;
 
     bool operator !=(const Vector&) const = default;
@@ -90,6 +96,19 @@ namespace Ashkal {
   inline Vector normalize(Vector vector) {
     return vector / magnitude(vector);
   }
+
+  inline Vector::Vector()
+    : m_x(0.f),
+      m_y(0.f),
+      m_z(0.f) {}
+
+  inline Vector::Vector(float x, float y, float z)
+    : m_x(x),
+      m_y(y),
+      m_z(z) {}
+
+  inline Vector::Vector(Point point)
+    : Vector(point.m_x, point.m_y, point.m_z) {}
 }
 
 #endif
