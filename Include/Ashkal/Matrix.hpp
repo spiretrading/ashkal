@@ -24,7 +24,6 @@ namespace Ashkal {
       friend Matrix invert(const Matrix& matrix);
       friend Matrix operator +(Matrix left, const Matrix& right);
       friend Matrix operator -(Matrix left, const Matrix& right);
-      friend Matrix operator *(Matrix left, const Matrix& right);
   };
 
   inline Matrix invert(const Matrix& matrix) {
@@ -166,17 +165,18 @@ namespace Ashkal {
     return left;
   }
 
-  inline Matrix operator *(Matrix left, const Matrix& right) {
+  inline Matrix operator *(const Matrix& left, const Matrix& right) {
+    auto result = Matrix();
     for(auto y = 0; y != Matrix::HEIGHT; ++y) {
       for(auto x = 0; x != Matrix::WIDTH; ++x) {
         auto e = 0.f;
         for(auto z = 0; z != Matrix::HEIGHT; ++z) {
           e += left.get(z, y) * right.get(x, z);
         }
-        left.set(x, y, e);
+        result.set(x, y, e);
       }
     }
-    return left;
+    return result;
   }
 
   inline Point operator *(const Matrix& left, Point right) {

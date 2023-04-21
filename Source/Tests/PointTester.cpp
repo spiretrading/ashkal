@@ -1,5 +1,5 @@
-#include <doctest/doctest.h>
 #include <sstream>
+#include <doctest/doctest.h>
 #include "Ashkal/Point.hpp"
 
 using namespace Ashkal;
