@@ -126,7 +126,7 @@ TEST_SUITE("Vector") {
     CHECK(magnitude(v) == result);
   }
 
-  TEST_CASE("normalized") {
+  TEST_CASE("normalize") {
     auto v = Vector(1.0f, 2.0f, 2.0f);
     auto result = Vector(1.0f / 3.0f, 2.0f / 3.0f, 2.0f / 3.0f);
     auto normalized = normalize(v);

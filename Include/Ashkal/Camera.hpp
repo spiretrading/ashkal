@@ -56,21 +56,8 @@ namespace Ashkal {
   }
 
   inline void tilt(Camera& camera, float tilt_x, float tilt_y) {
-    auto view_to_world = camera.get_view_to_world();
-    auto world_to_view = invert(view_to_world);
-    std::cout << "Original:" << std::endl;
-    std::cout << view_to_world << std::endl;
-    std::cout << "Local transform: " << std::endl;
-    auto local = yaw(tilt_x) * pitch(tilt_y);
-    std::cout << local << std::endl;
-    std::cout << "Global transform: " << std::endl;
-    std::cout << local * view_to_world << std::endl;
-/*
-    camera.apply(yaw(tilt_x) * pitch(tilt_y) * world_to_view);
-    std::cout << camera.get_view_to_world() << std::endl;
-    camera.apply(view_to_world);
-    std::cout << camera.get_view_to_world() << std::endl;
-*/
+    camera.apply(translate(Vector(camera.get_position())) * yaw(tilt_x) *
+      pitch(-tilt_y) * translate(-Vector(camera.get_position())));
   }
 
   inline Camera::Camera()
