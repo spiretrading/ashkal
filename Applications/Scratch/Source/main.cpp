@@ -798,10 +798,8 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
   auto scene = Scene();
   auto shape = std::make_shared<Sphere>(10, Color(255, 0, 0, 0));
   scene.add(shape);
-  auto camera = Camera();
-  camera.set_position(Point(9.5f, 9.5f, -29));
-  camera.set_direction(Vector(0, 0, 1));
-  camera.set_orientation(Vector(0, 1, 0));
+  auto camera =
+    Camera(Point(9.5f, 9.5f, -29), Vector(0, 0, 1), Vector(0, 1, 0));
   auto running = true;
   auto event = SDL_Event();
   auto window_id = SDL_GetWindowID(window);
