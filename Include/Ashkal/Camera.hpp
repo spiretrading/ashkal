@@ -64,7 +64,7 @@ namespace Ashkal {
     auto local = yaw(tilt_x) * pitch(tilt_y);
     std::cout << local << std::endl;
     std::cout << "Global transform: " << std::endl;
-    std::cout << view_to_world * local << std::endl;
+    std::cout << local * view_to_world << std::endl;
 /*
     camera.apply(yaw(tilt_x) * pitch(tilt_y) * world_to_view);
     std::cout << camera.get_view_to_world() << std::endl;
