@@ -7,22 +7,39 @@
 #include "Ashkal/Vector.hpp"
 
 namespace Ashkal {
+
+  /** Represents a camera within a voxel space. */
   class Camera {
     public:
+
+      /**
+       * Constructs a Camera at the origin (0, 0, 0), facing forward (0, 0, 1),
+       * and oriented upwards (0, 1, 0).
+       */
       Camera();
 
+      /**
+       * Constructs a Camera at a given position, with a given direction and
+       * orientation.
+       */
       Camera(Point position, Vector direction, Vector orientation);
 
+      /** Returns the view to world matrix. */
       const Matrix& get_view_to_world() const;
 
+      /** Returns the camera's position. */
       Point get_position() const;
 
+      /** Returns the camera's direction. */
       Vector get_direction() const;
 
+      /** Returns the camera's orientation. */
       Vector get_orientation() const;
 
+      /** Returns the camera's rightward direction. */
       Vector get_right() const;
 
+      /** Applies a transformation to this camera. */
       void apply(const Matrix& transformation);
 
     private:
@@ -38,23 +55,28 @@ namespace Ashkal {
       Matrix m_view_to_world;
   };
 
+  /** Moves a camera forward by a given distance. */
   inline void move_forward(Camera& camera, float distance) {
     camera.apply(translate(distance * camera.get_direction()));
   }
 
+  /** Moves a camera backward by a given distance. */
   inline void move_backward(Camera& camera, float distance) {
     move_forward(camera, -distance);
   }
 
+  /** Moves a camera left by a given distance. */
   inline void move_left(Camera& camera, float distance) {
     auto roll = cross(camera.get_orientation(), camera.get_direction());
     camera.apply(translate(distance * -roll));
   }
 
+  /** Moves a camera right by a given distance. */
   inline void move_right(Camera& camera, float distance) {
     move_left(camera, -distance);
   }
 
+  /** Tilts a camera horizontally and vertically. */
   inline void tilt(Camera& camera, float tilt_x, float tilt_y) {
     camera.apply(translate(Vector(camera.get_position())) * yaw(tilt_x) *
       pitch(-tilt_y) * translate(-Vector(camera.get_position())));

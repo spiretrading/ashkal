@@ -8,15 +8,24 @@
 #include "Ashkal/Vector.hpp"
 
 namespace Ashkal {
+
+  /** Represents a 4x4 matrix. */
   class Matrix {
     public:
+
+      /** The number of columns in the matrix. */
       static constexpr auto WIDTH = 4;
+
+      /** The number of rows in the matrix. */
       static constexpr auto HEIGHT = 4;
 
+      /** Returns the identity matrix. */
       static const Matrix& IDENTITY();
 
+      /** Returns the component at a specified index. */
       float get(int x, int y) const;
 
+      /** Sets the component at a specified index. */
       void set(int x, int y, float value);
 
     private:
@@ -27,6 +36,7 @@ namespace Ashkal {
       friend Matrix operator -(Matrix left, const Matrix& right);
   };
 
+  /** Computes the inverse of a matrix. */
   inline Matrix invert(const Matrix& matrix) {
     auto inverse = Matrix();
     inverse.m_elements[0] =

@@ -20,11 +20,13 @@ namespace Ashkal {
     friend auto operator <=>(const Point&, const Point&) = default;
   };
 
+  /** Returns a point whose coordinate's are all floored. */
   inline Point floor(Point point) {
     return Point(
       std::floor(point.m_x), std::floor(point.m_y), std::floor(point.m_z));
   }
 
+  /** Tests if a point is contained within a bounding box. */
   inline bool contains(Point start, Point end, Point point) {
     return point.m_x >= start.m_x && point.m_x < end.m_x &&
       point.m_y >= start.m_y && point.m_y < end.m_y &&

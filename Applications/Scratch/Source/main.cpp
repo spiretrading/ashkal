@@ -14,9 +14,13 @@
 #include <boost/compute/interop/opengl/opengl_texture.hpp>
 #include "Ashkal/Camera.hpp"
 #include "Ashkal/Color.hpp"
+#include "Ashkal/Cube.hpp"
 #include "Ashkal/Matrix.hpp"
+#include "Ashkal/Model.hpp"
 #include "Ashkal/Point.hpp"
+#include "Ashkal/Sphere.hpp"
 #include "Ashkal/Vector.hpp"
+#include "Ashkal/Voxel.hpp"
 #include "Version.hpp"
 
 using namespace Ashkal;
@@ -30,21 +34,6 @@ struct Accelerator {
     : m_context(compute::opengl_create_shared_context()),
       m_queue(m_context, m_context.get_device()) {}
 };
-
-struct Voxel {
-  constexpr static Voxel NONE() {
-    return Voxel(Color(0, 0, 0, 255));
-  }
-
-  Color m_color;
-
-  friend auto operator <=>(const Voxel&, const Voxel&) = default;
-};
-
-std::ostream& operator <<(std::ostream& out, Voxel voxel) {
-  return out <<
-    "Voxel(" << voxel.m_color << ')';
-}
 
 struct Ray {
   Point m_point;
@@ -101,70 +90,6 @@ Point compute_boundary(const Ray& ray, Point start, int size) {
   }
   return point_at(ray, t);
 }
-
-class Model {
-  public:
-    virtual ~Model() = default;
-
-    // Exclusive.
-    virtual Point end() const = 0;
-
-    virtual Voxel get(Point point) const = 0;
-};
-
-class Cube : public Model {
-  public:
-    Cube(int size, Color color)
-      : m_size(size),
-        m_color(color) {}
-
-    Point end() const override {
-      return Point(static_cast<float>(m_size), static_cast<float>(m_size),
-        static_cast<float>(m_size));
-    }
-
-    Voxel get(Point point) const override {
-      if(point.m_x >= 0 && point.m_y >= 0 && point.m_z >= 0 &&
-          point.m_x < m_size && point.m_y < m_size && point.m_z < m_size) {
-        return Voxel(m_color);
-      }
-      return Voxel::NONE();
-    }
-
-  private:
-    int m_size;
-    Color m_color;
-};
-
-class Sphere : public Model {
-  public:
-    Sphere(int radius, Color color)
-      : m_radius(radius),
-        m_inner(float(m_radius - 1), float(m_radius - 1), float(m_radius - 1)),
-        m_color(color) {}
-
-    Point end() const override {
-      return Point(2 * static_cast<float>(m_radius) - 1,
-        2 * static_cast<float>(m_radius) - 1,
-        2 * static_cast<float>(m_radius) - 1);
-    }
-
-    Voxel get(Point point) const override {
-      auto range = floor(point) - m_inner;
-      if(dot(range, range) <= m_radius * m_radius) {
-        if(point.m_y > m_radius) {
-          return Voxel(Color(0, 0, 255));
-        }
-        return Voxel(m_color);
-      }
-      return Voxel::NONE();
-    }
-
-  private:
-    int m_radius;
-    Point m_inner;
-    Color m_color;
-};
 
 class OctreeNode {
   public:

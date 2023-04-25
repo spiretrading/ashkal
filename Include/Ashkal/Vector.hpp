@@ -19,10 +19,13 @@ namespace Ashkal {
     /** The vector's z-component. */
     float m_z;
 
+    /** Constructs a Vector at the origin. */
     Vector();
 
+    /** Constructs a Vector component-wise. */
     Vector(float x, float y, float z);
 
+    /** Constructs a Vector from the origin to a specified point. */
     explicit Vector(Point point);
 
     bool operator ==(const Vector&) const = default;
