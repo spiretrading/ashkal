@@ -452,9 +452,9 @@ void intersect(const Scene& scene, compute::opengl_texture& texture, int width,
           } else {
             Color shaded_color =
               apply_ambient_light(ambient_light, intersection.m_voxel.m_color);
-//            shaded_color = add_color(shaded_color,
-//              apply_directional_light(directional_light,
-//                intersection.m_position, intersection.m_voxel.m_color));
+            shaded_color = add_color(shaded_color,
+              apply_directional_light(directional_light,
+                intersection.m_position, intersection.m_voxel.m_color));
             write_imagef(pixels, (int2)(x, y), (float4)(
               shaded_color.m_red / 255.f, shaded_color.m_green / 255.f,
               shaded_color.m_blue / 255.f, shaded_color.m_alpha / 255.f));

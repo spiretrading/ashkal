@@ -27,8 +27,6 @@ namespace Ashkal {
       }
 
       float calculate_shading(Vector normal, Vector light_direction) {
-        print_vector(normal);
-        print_vector(light_direction);
         return fabs(vector_dot(normal, light_direction));
       }
 
