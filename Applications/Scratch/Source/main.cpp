@@ -12,9 +12,11 @@
 #include <boost/compute/interop/opengl/acquire.hpp>
 #include <boost/compute/interop/opengl/context.hpp>
 #include <boost/compute/interop/opengl/opengl_texture.hpp>
+#include "Ashkal/AmbientLight.hpp"
 #include "Ashkal/Camera.hpp"
 #include "Ashkal/Color.hpp"
 #include "Ashkal/Cube.hpp"
+#include "Ashkal/DirectionalLight.hpp"
 #include "Ashkal/Matrix.hpp"
 #include "Ashkal/Model.hpp"
 #include "Ashkal/Point.hpp"
@@ -289,18 +291,32 @@ class Scene {
       return m_root.intersect(point, direction);
     }
 
+    AmbientLight get_ambient_light() const {
+      return m_ambient_light;
+    }
+
+    void set(AmbientLight light) {
+      m_ambient_light = light;
+    }
+
+    DirectionalLight get_directional_light() const {
+      return m_directional_light;
+    }
+
+    void set(DirectionalLight light) {
+      m_directional_light = light;
+    };
+
     void add(std::shared_ptr<Model> model) {
       m_root.add(model);
     }
 
   private:
+    AmbientLight m_ambient_light;
+    DirectionalLight m_directional_light;
     OctreeInternalNode m_root;
 };
 
-BOOST_COMPUTE_ADAPT_STRUCT(Color, Color, (m_red, m_green, m_blue, m_alpha));
-BOOST_COMPUTE_ADAPT_STRUCT(Voxel, Voxel, (m_color));
-BOOST_COMPUTE_ADAPT_STRUCT(Point, Point, (m_x, m_y, m_z));
-BOOST_COMPUTE_ADAPT_STRUCT(Vector, Vector, (m_x, m_y, m_z));
 BOOST_COMPUTE_ADAPT_STRUCT(Ray, Ray, (m_point, m_direction));
 
 void intersect(const Scene& scene, compute::opengl_texture& texture, int width,
@@ -312,6 +328,14 @@ void intersect(const Scene& scene, compute::opengl_texture& texture, int width,
       compute::type_definition<Point>() +
       compute::type_definition<Vector>() +
       compute::type_definition<Ray>() +
+      compute::type_definition<AmbientLight>() +
+      compute::type_definition<DirectionalLight>() +
+      COLOR_CL_SOURCE +
+      POINT_CL_SOURCE +
+      VECTOR_CL_SOURCE +
+      VOXEL_CL_SOURCE +
+      AMBIENT_LIGHT_CL_SOURCE +
+      DIRECTIONAL_LIGHT_CL_SOURCE +
       BOOST_COMPUTE_STRINGIZE_SOURCE(
         typedef struct {
           int m_width;
@@ -320,102 +344,10 @@ void intersect(const Scene& scene, compute::opengl_texture& texture, int width,
           __global Voxel* m_points;
         } Scene;
 
-        Voxel make_voxel(Color color) {
-          Voxel voxel;
-          voxel.m_color = color;
-          return voxel;
-        }
-
-        Color make_color(unsigned char red, unsigned green, unsigned char blue,
-            unsigned char alpha) {
-          Color color;
-          color.m_red = red;
-          color.m_green = green;
-          color.m_blue = blue;
-          color.m_alpha = alpha;
-          return color;
-        }
-
-        Point make_point(float x, float y, float z) {
-          Point point;
-          point.m_x = x;
-          point.m_y = y;
-          point.m_z = z;
-          return point;
-        }
-
-        Point floor_point(Point point) {
-          return make_point(
-            floor(point.m_x), floor(point.m_y), floor(point.m_z));
-        }
-
-        Vector make_vector(float x, float y, float z) {
-          Vector vector;
-          vector.m_x = x;
-          vector.m_y = y;
-          vector.m_z = z;
-          return vector;
-        }
-
-        Vector add_vector(Vector left, Vector right) {
-          left.m_x += right.m_x;
-          left.m_y += right.m_y;
-          left.m_z += right.m_z;
-          return left;
-        }
-
-        Vector sub_vector(Vector left, Vector right) {
-          left.m_x -= right.m_x;
-          left.m_y -= right.m_y;
-          left.m_z -= right.m_z;
-          return left;
-        }
-
-        Vector mul_int_vector(int left, Vector right) {
-          right.m_x *= left;
-          right.m_y *= left;
-          right.m_z *= left;
-          return right;
-        }
-
-        Vector mul_float_vector(float left, Vector right) {
-          right.m_x *= left;
-          right.m_y *= left;
-          right.m_z *= left;
-          return right;
-        }
-
-        Vector div_vector_float(Vector left, float right) {
-          left.m_x /= right;
-          left.m_y /= right;
-          left.m_z /= right;
-          return left;
-        }
-
-        Point add_point_vector(Point point, Vector vector) {
-          point.m_x += vector.m_x;
-          point.m_y += vector.m_y;
-          point.m_z += vector.m_z;
-          return point;
-        }
-
-        float magnitude(Vector vector) {
-          return sqrt(vector.m_x * vector.m_x +
-            vector.m_y * vector.m_y + vector.m_z * vector.m_z);
-        }
-
-        Vector norm(Vector vector) {
-          return div_vector_float(vector, magnitude(vector));
-        }
-
-        bool is_equal_color(Color left, Color right) {
-          return left.m_red == right.m_red && left.m_green == right.m_green &&
-            left.m_blue == right.m_blue && left.m_alpha == right.m_alpha;
-        }
-
-        bool is_none_voxel(Voxel voxel) {
-          return is_equal_color(voxel.m_color, make_color(0, 0, 0, 255));
-        }
+        typedef struct {
+          Voxel m_voxel;
+          Point m_position;
+        } VoxelIntersection;
 
         Voxel get_voxel_from_scene(Scene scene, Point point) {
           point = floor_point(point);
@@ -478,35 +410,28 @@ void intersect(const Scene& scene, compute::opengl_texture& texture, int width,
           return point_at(ray, t);
         }
 
-        bool contains(Point start, Point end, Point point) {
-          return point.m_x >= start.m_x && point.m_x < end.m_x &&
-            point.m_y >= start.m_y && point.m_y < end.m_y &&
-            point.m_z >= start.m_z && point.m_z < end.m_z;
-        }
-
-        void print_point(Point point) {
-          printf("Point(%f, %f, %f)", point.m_x, point.m_y, point.m_z);
-        }
-
-        void print_vector(Vector vector) {
-          printf("Vector(%f, %f, %f)", vector.m_x, vector.m_y, vector.m_z);
-        }
-
-        Voxel trace(Scene scene, Ray ray) {
+        VoxelIntersection trace(Scene scene, Ray ray) {
           while(contains(make_point(-64, -64, -2048), make_point(
               scene.m_width, scene.m_height, scene.m_depth), ray.m_point)) {
             Voxel voxel = get_voxel_from_scene(scene, ray.m_point);
             if(!is_none_voxel(voxel)) {
-              return voxel;
+              VoxelIntersection intersection;
+              intersection.m_voxel = voxel;
+              intersection.m_position = ray.m_point;
+              return intersection;
             }
             ray.m_point = compute_boundary(ray, floor_point(ray.m_point), 1);
           }
-          return make_voxel(make_color(0, 0, 0, 255));
+          VoxelIntersection intersection;
+          intersection.m_voxel = make_voxel(make_color(0, 0, 0, 255));
+          intersection.m_position = make_point(0, 0, 0);
+          return intersection;
         }
 
         __kernel void intersect(__global Voxel* points, int scene_width,
             int scene_height, int scene_depth, __write_only image2d_t pixels,
-            Point camera, Vector top_left, Vector x_shift, Vector y_shift) {
+            Point camera, Vector top_left, Vector x_shift, Vector y_shift,
+            AmbientLight ambient_light, DirectionalLight directional_light) {
           int x = get_global_id(0);
           int y = get_global_id(1);
           int width = get_global_size(0);
@@ -520,14 +445,19 @@ void intersect(const Scene& scene, compute::opengl_texture& texture, int width,
             top_left, mul_int_vector(x, x_shift)), mul_int_vector(y, y_shift));
           Ray ray;
           ray.m_point = add_point_vector(camera, direction);
-          ray.m_direction = norm(direction);
-          Voxel voxel = trace(scene, ray);
-          if(is_none_voxel(voxel)) {
+          ray.m_direction = normalize_vector(direction);
+          VoxelIntersection intersection = trace(scene, ray);
+          if(is_none_voxel(intersection.m_voxel)) {
             write_imagef(pixels, (int2)(x, y), (float4)(0.f, 0.f, 0.f, 0.f));
           } else {
+            Color shaded_color =
+              apply_ambient_light(ambient_light, intersection.m_voxel.m_color);
+//            shaded_color = add_color(shaded_color,
+//              apply_directional_light(directional_light,
+//                intersection.m_position, intersection.m_voxel.m_color));
             write_imagef(pixels, (int2)(x, y), (float4)(
-              voxel.m_color.m_red / 255.f, voxel.m_color.m_green / 255.f,
-              voxel.m_color.m_blue / 255.f, voxel.m_color.m_alpha / 255.f));
+              shaded_color.m_red / 255.f, shaded_color.m_green / 255.f,
+              shaded_color.m_blue / 255.f, shaded_color.m_alpha / 255.f));
           }
         });
     auto cache =
@@ -562,6 +492,10 @@ void intersect(const Scene& scene, compute::opengl_texture& texture, int width,
   kernel.set_arg(6, sizeof(Vector), &top_left);
   kernel.set_arg(7, sizeof(Vector), &x_shift);
   kernel.set_arg(8, sizeof(Vector), &y_shift);
+  auto ambient_light = scene.get_ambient_light();
+  kernel.set_arg(9, sizeof(AmbientLight), &ambient_light);
+  auto directional_light = scene.get_directional_light();
+  kernel.set_arg(10, sizeof(DirectionalLight), &directional_light);
   glFinish();
   compute::opengl_enqueue_acquire_gl_objects(1, &texture.get(),
     accelerator.m_queue);
@@ -721,6 +655,8 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
   glLoadIdentity();
   glTranslatef(0.f, 0.f, 0.f);
   auto scene = Scene();
+  scene.set(AmbientLight(Color(255, 255, 255, 0), 0.5));
+  scene.set(DirectionalLight(Vector(0, 0, -1), Color(255, 255, 255, 0), 1.f));
   auto shape = std::make_shared<Sphere>(10, Color(255, 0, 0, 0));
   scene.add(shape);
   auto camera =
