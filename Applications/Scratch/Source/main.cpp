@@ -20,6 +20,8 @@
 #include "Ashkal/Matrix.hpp"
 #include "Ashkal/Model.hpp"
 #include "Ashkal/Point.hpp"
+#include "Ashkal/Ray.hpp"
+#include "Ashkal/Scene.hpp"
 #include "Ashkal/Sphere.hpp"
 #include "Ashkal/Vector.hpp"
 #include "Ashkal/Voxel.hpp"
@@ -36,288 +38,6 @@ struct Accelerator {
     : m_context(compute::opengl_create_shared_context()),
       m_queue(m_context, m_context.get_device()) {}
 };
-
-struct Ray {
-  Point m_point;
-  Vector m_direction;
-};
-
-Point point_at(const Ray& ray, float t) {
-  return ray.m_point + t * ray.m_direction;
-}
-
-Point compute_boundary(const Ray& ray, Point start, int size) {
-  auto x_distance = [&] {
-    if(ray.m_direction.m_x == 0) {
-      return INFINITY;
-    }
-    if(ray.m_direction.m_x > 0) {
-      return start.m_x + size - ray.m_point.m_x;
-    }
-    return start.m_x - ray.m_point.m_x - 1;
-  }();
-  auto y_distance = [&] {
-    if(ray.m_direction.m_y == 0) {
-      return INFINITY;
-    }
-    if(ray.m_direction.m_y > 0) {
-      return start.m_y + size - ray.m_point.m_y;
-    }
-    return start.m_y - ray.m_point.m_y - 1;
-  }();
-  auto z_distance = [&] {
-    if(ray.m_direction.m_z == 0) {
-      return INFINITY;
-    }
-    if(ray.m_direction.m_z > 0) {
-      return start.m_z + size - ray.m_point.m_z;
-    }
-    return start.m_z - ray.m_point.m_z - 1;
-  }();
-  auto t = INFINITY;
-  if(x_distance != INFINITY) {
-    t = x_distance / ray.m_direction.m_x;
-  }
-  if(y_distance != INFINITY) {
-    auto r = y_distance / ray.m_direction.m_y;
-    if(r < t) {
-      t = r;
-    }
-  }
-  if(z_distance != INFINITY) {
-    auto r = z_distance / ray.m_direction.m_z;
-    if(r < t) {
-      t = r;
-    }
-  }
-  return point_at(ray, t);
-}
-
-class OctreeNode {
-  public:
-    virtual ~OctreeNode() = default;
-
-    Point get_start() const {
-      return m_start;
-    }
-
-    Point get_end() const {
-      return m_end;
-    }
-
-    virtual Voxel get(Point point) const = 0;
-
-    virtual Voxel intersect(Point& point, Vector direction) const = 0;
-
-    virtual void add(std::shared_ptr<Model> model) = 0;
-
-  protected:
-    OctreeNode(Point start, int size)
-      : m_start(start),
-        m_end(Point(start.m_x + size, start.m_y + size, start.m_z + size)) {}
-
-  private:
-    Point m_start;
-    Point m_end;
-};
-
-class OctreeLeaf : public OctreeNode {
-  public:
-    OctreeLeaf(Point start, int size)
-      : OctreeNode(start, size) {}
-
-    Voxel get(Point point) const override {
-      for(auto& model : m_models) {
-        auto voxel = model->get(point);
-        if(voxel != Voxel::NONE()) {
-          return voxel;
-        }
-      }
-      return Voxel::NONE();
-    }
-
-    Voxel intersect(Point& point, Vector direction) const override {
-      if(m_models.empty()) {
-        point = compute_boundary(Ray(point, direction), get_start(),
-          static_cast<int>(get_end().m_x - get_start().m_x));
-        return Voxel::NONE();
-      }
-      while(contains(get_start(), get_end(), point)) {
-        auto voxel = get(point);
-        if(voxel != Voxel::NONE()) {
-          return voxel;
-        }
-        point = compute_boundary(Ray(point, direction), floor(point), 1);
-      }
-      return Voxel::NONE();
-    }
-
-    void add(std::shared_ptr<Model> model) override {
-      m_models.push_back(std::move(model));
-    }
-
-  private:
-    std::vector<std::shared_ptr<Model>> m_models;
-};
-
-class OctreeInternalNode : public OctreeNode {
-  public:
-    OctreeInternalNode(Point start, int size)
-        : OctreeNode(start, size),
-          m_is_empty(true) {
-      if(size >= 128) {
-        m_children[0] = std::make_unique<OctreeInternalNode>(start, size / 2);
-        m_children[1] = std::make_unique<OctreeInternalNode>(
-          Point(start.m_x, start.m_y, start.m_z + size / 2), size / 2);
-        m_children[2] = std::make_unique<OctreeInternalNode>(
-          Point(start.m_x, start.m_y + size / 2, start.m_z), size / 2);
-        m_children[3] = std::make_unique<OctreeInternalNode>(
-          Point(start.m_x, start.m_y + size / 2, start.m_z + size / 2),
-          size / 2);
-        m_children[4] = std::make_unique<OctreeInternalNode>(
-          Point(start.m_x + size / 2, start.m_y, start.m_z), size / 2);
-        m_children[5] = std::make_unique<OctreeInternalNode>(
-          Point(start.m_x + size / 2, start.m_y, start.m_z + size / 2),
-          size / 2);
-        m_children[6] = std::make_unique<OctreeInternalNode>(
-          Point(start.m_x + size / 2, start.m_y + size / 2, start.m_z),
-          size / 2);
-        m_children[7] = std::make_unique<OctreeInternalNode>(
-          Point(start.m_x + size / 2, start.m_y + size / 2,
-            start.m_z + size / 2), size / 2);
-      } else {
-        m_children[0] = std::make_unique<OctreeLeaf>(start, size / 2);
-        m_children[1] = std::make_unique<OctreeLeaf>(
-          Point(start.m_x, start.m_y, start.m_z + size / 2), size / 2);
-        m_children[2] = std::make_unique<OctreeLeaf>(
-          Point(start.m_x, start.m_y + size / 2, start.m_z), size / 2);
-        m_children[3] = std::make_unique<OctreeLeaf>(
-          Point(start.m_x, start.m_y + size / 2, start.m_z + size / 2),
-          size / 2);
-        m_children[4] = std::make_unique<OctreeLeaf>(
-          Point(start.m_x + size / 2, start.m_y, start.m_z), size / 2);
-        m_children[5] = std::make_unique<OctreeLeaf>(Point(start.m_x + size / 2,
-          start.m_y, start.m_z + size / 2), size / 2);
-        m_children[6] = std::make_unique<OctreeLeaf>(Point(start.m_x + size / 2,
-          start.m_y + size / 2, start.m_z), size / 2);
-        m_children[7] = std::make_unique<OctreeLeaf>(Point(start.m_x + size / 2,
-          start.m_y + size / 2, start.m_z + size / 2), size / 2);
-      }
-    }
-
-    Voxel get(Point point) const override {
-      return get_node(point).get(point);
-    }
-
-    Voxel intersect(Point& point, Vector direction) const {
-      if(m_is_empty) {
-        point = compute_boundary(Ray(point, direction), get_start(),
-          static_cast<int>(get_end().m_x - get_start().m_x));
-        return Voxel::NONE();
-      }
-      while(contains(get_start(), get_end(), point)) {
-        auto voxel = get_node(point).intersect(point, direction);
-        if(voxel != Voxel::NONE()) {
-          return voxel;
-        }
-      }
-      return Voxel::NONE();
-    }
-
-    void add(std::shared_ptr<Model> model) {
-      if((0 <= get_start().m_x && model->end().m_x > get_start().m_x ||
-          0 < get_end().m_x && model->end().m_x > get_start().m_x) &&
-          (0 <= get_start().m_y && model->end().m_y > get_start().m_y ||
-          0 < get_end().m_y && model->end().m_y > get_start().m_y) &&
-          (0 <= get_start().m_z && model->end().m_z > get_start().m_z ||
-          0 < get_end().m_z && model->end().m_z > get_start().m_z)) {
-        m_is_empty = false;
-        for(auto& child : m_children) {
-          child->add(model);
-        }
-      }
-    }
-
-  private:
-    bool m_is_empty;
-    std::array<std::unique_ptr<OctreeNode>, 8> m_children;
-
-    const OctreeNode& get_node(Point point) const {
-      return *m_children[get_node_index(point)];
-    }
-
-    OctreeNode& get_node(Point point) {
-      return *m_children[get_node_index(point)];
-    }
-
-    int get_node_index(Point point) const {
-      auto size = get_end().m_x - get_start().m_x;
-      if(point.m_x < get_start().m_x + size / 2) {
-        if(point.m_y < get_start().m_y + size / 2) {
-          if(point.m_z < get_start().m_z + size / 2) {
-            return 0;
-          }
-          return 1;
-        }
-        if(point.m_z < get_start().m_z + size / 2) {
-          return 2;
-        }
-        return 3;
-      }
-      if(point.m_y < get_start().m_y + size / 2) {
-        if(point.m_z < get_start().m_z + size / 2) {
-          return 4;
-        }
-        return 5;
-      }
-      if(point.m_z < get_start().m_z + size / 2) {
-        return 6;
-      } else {
-        return 7;
-      }
-    }
-};
-
-class Scene {
-  public:
-    Scene()
-      : m_root(Point(-2048, -2048, -2048), 4096) {}
-
-    Voxel get(Point point) const {
-      return m_root.get(point);
-    }
-
-    Voxel intersect(Point point, Vector direction) const {
-      return m_root.intersect(point, direction);
-    }
-
-    AmbientLight get_ambient_light() const {
-      return m_ambient_light;
-    }
-
-    void set(AmbientLight light) {
-      m_ambient_light = light;
-    }
-
-    DirectionalLight get_directional_light() const {
-      return m_directional_light;
-    }
-
-    void set(DirectionalLight light) {
-      m_directional_light = light;
-    };
-
-    void add(std::shared_ptr<Model> model) {
-      m_root.add(model);
-    }
-
-  private:
-    AmbientLight m_ambient_light;
-    DirectionalLight m_directional_light;
-    OctreeInternalNode m_root;
-};
-
-BOOST_COMPUTE_ADAPT_STRUCT(Ray, Ray, (m_point, m_direction));
 
 void intersect(const Scene& scene, compute::opengl_texture& texture, int width,
     int height, Point camera, Vector top_left, Vector x_shift, Vector y_shift,
@@ -336,6 +56,7 @@ void intersect(const Scene& scene, compute::opengl_texture& texture, int width,
       VOXEL_CL_SOURCE +
       AMBIENT_LIGHT_CL_SOURCE +
       DIRECTIONAL_LIGHT_CL_SOURCE +
+      RAY_CL_SOURCE +
       BOOST_COMPUTE_STRINGIZE_SOURCE(
         typedef struct {
           int m_width;
@@ -359,55 +80,6 @@ void intersect(const Scene& scene, compute::opengl_texture& texture, int width,
           size_t index = (size_t)(point.m_x) + scene.m_width *
             ((size_t)(point.m_y) + scene.m_height * (size_t)(point.m_z));
           return scene.m_points[index];
-        }
-
-        Point point_at(Ray ray, float t) {
-          return add_point_vector(
-            ray.m_point, mul_float_vector(t, ray.m_direction));
-        }
-
-        Point compute_boundary(Ray ray, Point start, int size) {
-          float x_distance;
-          if(ray.m_direction.m_x == 0) {
-            x_distance = INFINITY;
-          } else if(ray.m_direction.m_x > 0) {
-            x_distance = start.m_x + size - ray.m_point.m_x;
-          } else {
-            x_distance = start.m_x - ray.m_point.m_x - 0.001f;
-          }
-          float y_distance;
-          if(ray.m_direction.m_y == 0) {
-            y_distance = INFINITY;
-          } else if(ray.m_direction.m_y > 0) {
-            y_distance = start.m_y + size - ray.m_point.m_y;
-          } else {
-            y_distance = start.m_y - ray.m_point.m_y - 0.001f;
-          }
-          float z_distance;
-          if(ray.m_direction.m_z == 0) {
-            z_distance = INFINITY;
-          } else if(ray.m_direction.m_z > 0) {
-            z_distance = start.m_z + size - ray.m_point.m_z;
-          } else {
-            z_distance = start.m_z - ray.m_point.m_z - 0.001f;
-          }
-          float t = INFINITY;
-          if(x_distance != INFINITY) {
-            t = x_distance / ray.m_direction.m_x;
-          }
-          if(y_distance != INFINITY) {
-            float r = y_distance / ray.m_direction.m_y;
-            if(r < t) {
-              t = r;
-            }
-          }
-          if(z_distance != INFINITY) {
-            float r = z_distance / ray.m_direction.m_z;
-            if(r < t) {
-              t = r;
-            }
-          }
-          return point_at(ray, t);
         }
 
         VoxelIntersection trace(Scene scene, Ray ray) {
@@ -454,7 +126,9 @@ void intersect(const Scene& scene, compute::opengl_texture& texture, int width,
               apply_ambient_light(ambient_light, intersection.m_voxel.m_color);
             shaded_color = add_color(shaded_color,
               apply_directional_light(directional_light,
-                intersection.m_position, intersection.m_voxel.m_color));
+                compute_surface_normal(intersection.m_position,
+                  floor_point(intersection.m_position)),
+                intersection.m_voxel.m_color));
             write_imagef(pixels, (int2)(x, y), (float4)(
               shaded_color.m_red / 255.f, shaded_color.m_green / 255.f,
               shaded_color.m_blue / 255.f, shaded_color.m_alpha / 255.f));
@@ -534,7 +208,7 @@ void render_cpu(const Scene& scene, Accelerator& accelerator,
     for(auto x = 0; x < width; ++x) {
       auto direction = top_left + x * x_shift - y * y_shift;
       auto point = camera.get_position() + direction;
-      auto voxel = scene.intersect(point, normalize(direction));
+      auto voxel = scene.intersect(point, normalize(direction)).m_voxel;
       if(voxel == Voxel::NONE()) {
         pixels.push_back(Color(0, 0, 0));
       } else {

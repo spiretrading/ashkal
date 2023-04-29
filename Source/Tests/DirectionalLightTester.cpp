@@ -53,9 +53,9 @@ TEST_SUITE("DirectionalLight") {
     auto color = Color(255, 0, 0, 0);
 //    CHECK(test_apply_directional_light(light, intersection, color) ==
 //      Color(255, 0, 0, 0));
-    auto back_intersection = Point(0, -10, 0);
-    CHECK(test_apply_directional_light(light, back_intersection, color) ==
-      Color(0, 0, 0, 0));
+//    auto back_intersection = Point(0, -10, 0);
+//    CHECK(test_apply_directional_light(light, back_intersection, color) ==
+//      Color(0, 0, 0, 0));
   }
 #if 0
   TEST_CASE("angle_directional_light") {

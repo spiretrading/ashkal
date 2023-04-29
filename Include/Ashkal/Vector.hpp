@@ -195,11 +195,9 @@ namespace Ashkal {
       float abs_z = fabs(direction.m_z);
       if (abs_x >= abs_y && abs_x >= abs_z) {
         return make_vector(sign(direction.m_x), 0.f, 0.f);
-      }
-      else if (abs_y >= abs_x && abs_y >= abs_z) {
+      } else if (abs_y >= abs_x && abs_y >= abs_z) {
         return make_vector(0.f, sign(direction.m_y), 0.f);
-      }
-      else {
+      } else {
         return make_vector(0.f, 0.f, sign(direction.m_z));
       }
     }
