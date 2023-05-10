@@ -27,7 +27,7 @@ namespace Ashkal {
       }
 
       float calculate_shading(Vector normal, Vector light_direction) {
-        return fabs(vector_dot(normal, light_direction));
+        return max(vector_dot(normal, light_direction), 0.f);
       }
 
       Color apply_ambient_light(AmbientLight light, Color color) {

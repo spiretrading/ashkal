@@ -172,6 +172,10 @@ namespace Ashkal {
       return point;
     }
 
+    Vector negate_vector(Vector vector) {
+      return make_vector(-vector.m_x, -vector.m_y, -vector.m_z);
+    }
+
     float vector_dot(Vector a, Vector b) {
       return a.m_x * b.m_x + a.m_y * b.m_y + a.m_z * b.m_z;
     }

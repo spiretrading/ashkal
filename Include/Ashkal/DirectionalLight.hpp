@@ -18,7 +18,8 @@ namespace Ashkal {
     BOOST_COMPUTE_STRINGIZE_SOURCE(
       Color apply_directional_light(
           DirectionalLight light, Vector surface_normal, Color color) {
-        float shading = calculate_shading(surface_normal, light.m_direction);
+        float shading = calculate_shading(
+          surface_normal, negate_vector(light.m_direction));
         return apply_shading(color, light.m_color, shading, light.m_intensity);
       });
 }

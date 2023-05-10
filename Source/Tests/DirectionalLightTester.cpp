@@ -8,7 +8,7 @@ using namespace boost;
 
 namespace {
   Color test_apply_directional_light(
-      DirectionalLight light, Point intersection, Color color) {
+      DirectionalLight light, Vector surface_normal, Color color) {
     auto test_context = compute::context(compute::system::default_device());
     auto kernel = [&] {
       auto source = compute::type_definition<Color>() +
@@ -22,9 +22,9 @@ namespace {
         AMBIENT_LIGHT_CL_SOURCE +
         DIRECTIONAL_LIGHT_CL_SOURCE +
         BOOST_COMPUTE_STRINGIZE_SOURCE(
-          __kernel void test(DirectionalLight light, Point intersection,
+          __kernel void test(DirectionalLight light, Vector surface_normal,
               Color color, __global Color * result) {
-            *result = apply_directional_light(light, intersection, color);
+            *result = apply_directional_light(light, surface_normal, color);
           });
       auto cache = compute::program_cache::get_global_cache(test_context);
       auto key = std::string("__test");
@@ -34,7 +34,7 @@ namespace {
     auto result = compute::vector<Color>(1, test_context);
     result.push_back(Color());
     kernel.set_arg(0, sizeof(DirectionalLight), &light);
-    kernel.set_arg(1, sizeof(Point), &intersection);
+    kernel.set_arg(1, sizeof(Vector), &surface_normal);
     kernel.set_arg(2, sizeof(Color), &color);
     kernel.set_arg(3, result.get_buffer());
     auto test_queue =
@@ -49,22 +49,24 @@ TEST_SUITE("DirectionalLight") {
   TEST_CASE("apply_directional_light") {
     auto light =
       DirectionalLight(Vector(0, 0, 1), Color(255, 255, 255, 0), 1.f);
-    auto intersection = Point(0, 0, 10);
     auto color = Color(255, 0, 0, 0);
-//    CHECK(test_apply_directional_light(light, intersection, color) ==
-//      Color(255, 0, 0, 0));
-//    auto back_intersection = Point(0, -10, 0);
-//    CHECK(test_apply_directional_light(light, back_intersection, color) ==
-//      Color(0, 0, 0, 0));
+    auto front_color =
+      test_apply_directional_light(light, Vector(0, 0, -1), color);
+    CHECK(front_color == Color(255, 0, 0, 0));
+    auto back_color =
+      test_apply_directional_light(light, Vector(0, 0, 1), color);
+    CHECK(back_color == Color(0, 0, 0, 0));
+    auto left_color =
+      test_apply_directional_light(light, Vector(-1, 0, 0), color);
+    CHECK(left_color == Color(0, 0, 0, 0));
+    auto right_color =
+      test_apply_directional_light(light, Vector(1, 0, 0), color);
+    CHECK(right_color == Color(0, 0, 0, 0));
+    auto top_color =
+      test_apply_directional_light(light, Vector(0, 1, 0), color);
+    CHECK(top_color == Color(0, 0, 0, 0));
+    auto bottom_color =
+      test_apply_directional_light(light, Vector(0, -1, 0), color);
+    CHECK(bottom_color == Color(0, 0, 0, 0));
   }
-#if 0
-  TEST_CASE("angle_directional_light") {
-    auto light = DirectionalLight(
-      normalize(Vector(0, -1, 1)), Color(255, 255, 255, 0), 1.f);
-    auto intersection = Point(0, 0, 10);
-    auto color = Color(255, 0, 0, 0);
-    CHECK(test_apply_directional_light(light, intersection, color) ==
-      Color(180, 0, 0, 0));
-  }
-#endif
 }

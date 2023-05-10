@@ -45,17 +45,17 @@ namespace Ashkal {
       normal = Vector(0.f, -1.f, 0.f);
     }
     distance = std::abs(position.m_y + 1.f - intersection.m_y);
-    if (distance < min_distance) {
+    if(distance < min_distance) {
       min_distance = distance;
       normal = Vector(0.f, 1.f, 0.f);
     }
     distance = std::abs(position.m_z - intersection.m_z);
-    if (distance < min_distance) {
+    if(distance < min_distance) {
       min_distance = distance;
       normal = Vector(0.f, 0.f, -1.f);
     }
     distance = std::abs(position.m_z + 1.f - intersection.m_z);
-    if (distance < min_distance) {
+    if(distance < min_distance) {
       min_distance = distance;
       normal = Vector(0.f, 0.f, 1.f);
     }

@@ -330,8 +330,9 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
   glTranslatef(0.f, 0.f, 0.f);
   auto scene = Scene();
   scene.set(AmbientLight(Color(255, 255, 255, 0), 0.5));
-  scene.set(DirectionalLight(Vector(0, 0, -1), Color(255, 255, 255, 0), 1.f));
-  auto shape = std::make_shared<Sphere>(10, Color(255, 0, 0, 0));
+  scene.set(DirectionalLight(Vector(0, 0, 1), Color(255, 255, 255, 0), 1.f));
+//  auto shape = std::make_shared<Sphere>(10, Color(255, 0, 0, 0));
+  auto shape = std::make_shared<Cube>(1, Color(255, 0, 0, 0));
   scene.add(shape);
   auto camera =
     Camera(Point(9.5f, 9.5f, -29), Vector(0, 0, 1), Vector(0, 1, 0));
