@@ -17,7 +17,8 @@ TEST_SUITE("Voxel") {
   }
 
   TEST_CASE("compute_surface_normal") {
-    auto n1 = compute_surface_normal(Point(1, 0, 0), Point(1.f, 0.f, 0.f));
-    auto n2 = compute_surface_normal(Point(0, 0, 0), Point(1.f, 0.f, 0.f));
+    auto intersection = Point(1, 0.5f, .1f);
+    auto n1 = compute_surface_normal(intersection, floor(intersection));
+    CHECK(n1 == Vector(1, 0, 0));
   }
 }
