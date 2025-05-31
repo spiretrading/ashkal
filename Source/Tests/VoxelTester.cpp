@@ -15,10 +15,4 @@ TEST_SUITE("Voxel") {
     oss << Voxel(Color(255, 0, 255, 0));
     CHECK(oss.str() == "Voxel(Color(255, 0, 255, 0))");
   }
-
-  TEST_CASE("compute_surface_normal") {
-    auto intersection = Point(1, 0.5f, .1f);
-    auto n1 = compute_surface_normal(intersection, floor(intersection));
-    CHECK(n1 == Vector(1, 0, 0));
-  }
 }

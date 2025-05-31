@@ -16,9 +16,9 @@ TEST_SUITE("Point") {
     auto p1 = Point(1.0f, 2.0f, 3.0f);
     auto p2 = Point(1.0f, 2.0f, 3.0f);
     auto p3 = Point(1.5f, 2.5f, 3.5f);
-    CHECK((p1 <=> p2) == 0);
-    CHECK((p1 <=> p3) < 0);
-    CHECK((p3 <=> p1) > 0);
+    CHECK(p1 == p2);
+    CHECK(p1 < p3);
+    CHECK(p3 > p1);
   }
 
   TEST_CASE("floor") {
