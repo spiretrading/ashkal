@@ -51,7 +51,7 @@ Color lerp(Color a, Color b, float t) {
 }
 
 void render(std::vector<std::uint32_t>& frame_buffer,
-    std::vector<float> depth_buffer, const Camera& camera,
+    std::vector<float>& depth_buffer, const Camera& camera,
     const std::vector<Vertex>& vertices, const MeshTriangle& triangle,
     const Matrix& transformation, int width, int height) {
   auto& a = vertices[triangle.m_a];
@@ -93,10 +93,10 @@ void render(std::vector<std::uint32_t>& frame_buffer,
           auto color = lerp(a.m_color, b.m_color, w1 / sum);
           auto final_color = lerp(color, c.m_color, w2 / sum);
           auto pixel =
-            (std::uint32_t(final_color.m_alpha) << 24) |
-            (std::uint32_t(final_color.m_red)   << 16) |
-            (std::uint32_t(final_color.m_green) << 8 ) |
-            (std::uint32_t(final_color.m_blue));
+            (std::uint32_t(final_color.m_red) << 24) |
+            (std::uint32_t(final_color.m_green) << 16) |
+            (std::uint32_t(final_color.m_blue) << 8) |
+            std::uint32_t(final_color.m_alpha);
           frame_buffer[index] = pixel;
         }
       }
@@ -147,7 +147,7 @@ void render(std::vector<std::uint32_t>& frame_buffer,
     element.get_transformation(), width, height);
 }
 
-Mesh make_cube() {
+Mesh make_cube(Color color) {
   auto vertices = std::vector<Vertex>();
   vertices.reserve(24);
   auto triangles = std::vector<MeshTriangle>();
@@ -156,34 +156,30 @@ Mesh make_cube() {
       float nx, float ny, float nz, Color c) {
     vertices.push_back(Vertex(Point(x, y, z), Vector(nx, ny, nz), c));
   };
-  auto white = Color(255, 255, 255, 255);
-  auto red = Color(255, 0, 0, 255);
-  auto green = Color(0, 255, 0, 255);
-  auto blue = Color(0, 0, 255, 255);
-  addVertex(1, -1, -1, 1, 0, 0, white);
-  addVertex(1, 1, -1, 1, 0, 0, red);
-  addVertex(1, 1, 1, 1, 0, 0, green);
-  addVertex(1, -1, 1, 1, 0, 0, blue);
-  addVertex(-1, -1, 1, -1, 0, 0, blue);
-  addVertex(-1, 1, 1, -1, 0, 0, red);
-  addVertex(-1, 1, -1, -1, 0, 0, green);
-  addVertex(-1, -1, -1, -1, 0, 0, white);
-  addVertex(-1, 1, -1, 0, 1, 0, red);
-  addVertex(-1, 1, 1, 0, 1, 0, green);
-  addVertex(1, 1, 1, 0, 1, 0, white);
-  addVertex(1, 1, -1, 0, 1, 0, blue);
-  addVertex(-1, -1, 1, 0,-1, 0, red);
-  addVertex(1, -1, 1, 0,-1, 0, green);
-  addVertex(1, -1, -1, 0,-1, 0, blue);
-  addVertex(-1, -1, -1, 0,-1, 0, white);
-  addVertex(-1, -1, 1, 0, 0, 1, blue);
-  addVertex(1, -1, 1, 0, 0, 1, green);
-  addVertex(1, 1, 1, 0, 0, 1, white);
-  addVertex(-1, 1, 1, 0, 0, 1, red);
-  addVertex(1, -1, -1, 0, 0,-1, blue);
-  addVertex(-1, -1, -1, 0, 0,-1, red);
-  addVertex(-1, 1, -1, 0, 0,-1, green);
-  addVertex(1, 1, -1, 0, 0,-1, white);
+  addVertex(1, -1, -1, 1, 0, 0, color);
+  addVertex(1, 1, -1, 1, 0, 0, color);
+  addVertex(1, 1, 1, 1, 0, 0, color);
+  addVertex(1, -1, 1, 1, 0, 0, color);
+  addVertex(-1, -1, 1, -1, 0, 0, color);
+  addVertex(-1, 1, 1, -1, 0, 0, color);
+  addVertex(-1, 1, -1, -1, 0, 0, color);
+  addVertex(-1, -1, -1, -1, 0, 0, color);
+  addVertex(-1, 1, -1, 0, 1, 0, color);
+  addVertex(-1, 1, 1, 0, 1, 0, color);
+  addVertex(1, 1, 1, 0, 1, 0, color);
+  addVertex(1, 1, -1, 0, 1, 0, color);
+  addVertex(-1, -1, 1, 0,-1, 0, color);
+  addVertex(1, -1, 1, 0,-1, 0, color);
+  addVertex(1, -1, -1, 0,-1, 0, color);
+  addVertex(-1, -1, -1, 0,-1, 0, color);
+  addVertex(-1, -1, 1, 0, 0, 1, color);
+  addVertex(1, -1, 1, 0, 0, 1, color);
+  addVertex(1, 1, 1, 0, 0, 1, color);
+  addVertex(-1, 1, 1, 0, 0, 1, color);
+  addVertex(1, -1, -1, 0, 0,-1, color);
+  addVertex(-1, -1, -1, 0, 0,-1, color);
+  addVertex(-1, 1, -1, 0, 0,-1, color);
+  addVertex(1, 1, -1, 0, 0,-1, color);
   triangles.push_back({0, 1, 2});
   triangles.push_back({0, 2, 3});
   triangles.push_back({4, 5, 6});
@@ -197,6 +193,39 @@ Mesh make_cube() {
   triangles.push_back({20, 21, 22});
   triangles.push_back({20, 22, 23});
   return Mesh(std::move(vertices), MeshNode(std::move(triangles)));
+}
+
+std::vector<std::vector<int>> level_map = {
+  {1,1,1,1,1,1,1,1},
+  {1,0,0,0,0,0,0,1},
+  {1,0,1,0,1,1,0,1},
+  {1,0,0,0,0,0,0,1},
+  {1,1,1,1,1,1,1,1},
+};
+
+std::vector<std::unique_ptr<SceneElement>> make_scene(
+    const std::vector<std::vector<int>>& scene) {
+    std::vector<std::unique_ptr<SceneElement>> elements;
+    int depth = int(scene.size());
+
+    for (int y = 0; y < depth; ++y) {
+        for (int x = 0; x < int(scene[y].size()); ++x) {
+            if (scene[y][x] == 1) {
+                // create a blue cube
+                auto element = std::make_unique<SceneElement>(
+                    make_cube(Color{0, 0, 255, 255})
+                );
+
+                // place its origin at (2*x, 1, -2*(depth - y))
+                // (so that the cube sits with its bottom at y=0)
+                Matrix T = translate(Vector{ 2.0f*float(x), 1.0f, -2.0f*(float(depth)-float(y)) });
+                element->get_transformation().apply(T, element->get_mesh().m_root);
+
+                elements.push_back(std::move(element));
+            }
+        }
+    }
+    return elements;
 }
 
 auto make_shader(int width, int height) {
@@ -304,17 +333,22 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
   auto frame_buffer = std::vector<std::uint32_t>(WIDTH * HEIGHT, 0);
   auto depth_buffer =
     std::vector<float>(WIDTH * HEIGHT, std::numeric_limits<float>::infinity());
-  auto camera = Camera(Point(0, 0, 10), Vector(0, 0, -1), Vector(0, 1, 0));
-  auto cube = SceneElement(make_cube());
+  auto depth = int(level_map.size());
+  auto cx = 3;
+  auto cy = 2;
+  auto camera = Camera(
+    Point(2 * cx, 1, -2 * (depth - cy)), Vector(0, 0, -1), Vector(0, 1, 0));
+  auto scene = make_scene(level_map);
   auto is_running = true;
   auto event = SDL_Event();
   auto window_id = SDL_GetWindowID(window);
-  auto frames = 0;
-  auto start = std::chrono::high_resolution_clock::now();
+  auto frame_count = 0;
+  auto start_time = std::chrono::high_resolution_clock::now();
+  auto fps = 0.f;
   auto last_mouse_x = std::numeric_limits<int>::min();
   auto last_mouse_y = std::numeric_limits<int>::min();
   while(is_running) {
-    ++frames;
+    ++frame_count;
     std::fill(frame_buffer.begin(), frame_buffer.end(), 0);
     std::fill(depth_buffer.begin(), depth_buffer.end(),
       std::numeric_limits<float>::infinity());
@@ -339,21 +373,13 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
     } else if(state[SDL_SCANCODE_D] || state[SDL_SCANCODE_RIGHT]) {
       move_right(camera, 1 / 10.f);
     }
-    auto mouse_x = 0;
-    auto mouse_y = 0;
-    SDL_GetMouseState(&mouse_x, &mouse_y);
-    if(last_mouse_x != std::numeric_limits<int>::min() &&
-        !state[SDL_SCANCODE_LALT] && !state[SDL_SCANCODE_RALT]) {
-      auto delta_x = ((mouse_x - last_mouse_x) / (WIDTH / 2.f)) *
-        (std::numbers::pi_v<float> / 2);
-      auto delta_y = ((mouse_y - last_mouse_y) / (HEIGHT / 2.f)) *
-        (std::numbers::pi_v<float> / 2);
-      tilt(camera, delta_x, delta_y);
+    int relX = 0, relY = 0;
+    SDL_GetRelativeMouseState(&relX, &relY);
+    float deltaAngle = relX * 0.0025f; 
+    tilt(camera, deltaAngle, 0);
+    for(auto& element : scene) {
+      render(frame_buffer, depth_buffer, camera, *element, WIDTH, HEIGHT);
     }
-    last_mouse_x = mouse_x;
-    last_mouse_y = mouse_y;
-    cube.get_transformation().apply(roll(0.1), cube.get_mesh().m_root);
-    render(frame_buffer, depth_buffer, camera, cube, WIDTH, HEIGHT);
     glBindTexture(GL_TEXTURE_2D, texture_id);
     glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, WIDTH, HEIGHT, GL_RGBA,
       GL_UNSIGNED_BYTE, frame_buffer.data());
@@ -370,24 +396,23 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
     glVertex2f(0.f, static_cast<float>(HEIGHT));
     glEnd();
     glBindTexture(GL_TEXTURE_2D, 0);
+    auto now = std::chrono::high_resolution_clock::now();
+    auto elapsed = std::chrono::duration<float>(now - start_time).count();
+    if(elapsed >= 1.f) {
+      fps = frame_count / elapsed;
+      frame_count = 0;
+      start_time = now;
+    }
     auto info = "Position: " +
-      lexical_cast<std::string>(camera.get_position()) + "\n";
-    info += "Mouse: (" + lexical_cast<std::string>(mouse_x) + ", " +
-      lexical_cast<std::string>(mouse_y) + ")\n";
+      lexical_cast<std::string>(camera.get_position()) + "   ";
     info += "Direction: " + lexical_cast<std::string>(camera.get_direction()) +
-      "\n";
+      "   ";
     info += "Orientation: " +
-      lexical_cast<std::string>(camera.get_orientation()) + "\n";
-    info += "FPS: " + lexical_cast<std::string>(
-      frames / std::chrono::duration_cast<std::chrono::duration<double>>(
-      std::chrono::high_resolution_clock::now() - start).count());
+      lexical_cast<std::string>(camera.get_orientation()) + "   ";
+    info += "FPS: " + lexical_cast<std::string>(fps);
     draw_text(info, 12, 0, 0, SDL_Color{.g=255, .a=255});
     SDL_GL_SwapWindow(window);
   }
-  auto end = std::chrono::high_resolution_clock::now();
-  std::cout << (
-    frames / std::chrono::duration_cast<std::chrono::duration<double>>(
-      end - start).count()) << std::endl;
   SDL_DestroyWindow(window);
   SDL_GL_DeleteContext(gl_context);
   glDeleteTextures(1, &texture_id);
