@@ -22,13 +22,15 @@ Point transform(const Point& point, const Camera& camera) {
 std::pair<int, int> project_to_screen(
     const Point& point, int width, int height) {
   if(point.m_z >= 0) {
-    return {-1, -1};
+    return std::pair(-1, -1);
   }
-  auto x = point.m_x / -point.m_z;
-  auto y = point.m_y / -point.m_z;
-  auto px = int((x + 1) * 0.5f * width);
-  auto py = int((1 - (y + 1) * 0.5f) * height);
-  return std::pair(px, py);
+  auto perspective = 1.0f / -point.m_z;
+  auto aspect_ratio = float(width) / float(height);
+  auto x = (point.m_x * perspective) / aspect_ratio;
+  auto y = point.m_y * perspective;
+  auto screen_x = int((x + 1.0f) * 0.5f * width);
+  auto screen_y = int((1.0f - (y + 1.0f) * 0.5f) * height);
+  return std::pair(screen_x, screen_y);
 }
 
 float compute_edge(const std::pair<int, int>& p1,
