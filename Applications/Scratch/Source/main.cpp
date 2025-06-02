@@ -3,15 +3,20 @@
 #include <numbers>
 #include <utility>
 #include <vector>
+#include <boost/compute.hpp>
 #include <GL/glew.h>
 #include <SDL.h>
 #include <SDL_ttf.h>
 #include <Windows.h>
+#include <boost/compute/interop/opengl/acquire.hpp>
+#include <boost/compute/interop/opengl/context.hpp>
+#include <boost/compute/interop/opengl/opengl_texture.hpp>
 #include "Ashkal/Camera.hpp"
 #include "Ashkal/SceneElement.hpp"
 #include "Version.hpp"
 
 using namespace Ashkal;
+using namespace boost;
 
 Point transform(const Point& point, const Camera& camera) {
   auto rel = point - camera.get_position();
@@ -194,16 +199,108 @@ Mesh make_cube() {
   return Mesh(std::move(vertices), MeshNode(std::move(triangles)));
 }
 
+auto make_shader(int width, int height) {
+  auto texture_id = GLuint();
+  glGenTextures(1, &texture_id);
+  glBindTexture(GL_TEXTURE_2D, texture_id);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA,
+    GL_UNSIGNED_BYTE, nullptr);
+  glBindTexture(GL_TEXTURE_2D, 0);
+  return texture_id;
+}
+
+auto render_text(const std::string& message, SDL_Color color, int font_size) {
+  auto texture = GLuint(0);
+  auto font = TTF_OpenFont("C:\\Windows\\Fonts\\arial.ttf", font_size);
+  if(!font) {
+    return std::tuple(0, 0, texture);
+  }
+  auto surface = TTF_RenderText_Blended(font, message.c_str(), color);
+  if(!surface) {
+    TTF_CloseFont(font);
+    return std::tuple(0, 0, texture);
+  }
+  glGenTextures(1, &texture);
+  glBindTexture(GL_TEXTURE_2D, texture);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+  auto width = surface->w;
+  auto height = surface->h;
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_BGRA,
+    GL_UNSIGNED_BYTE, surface->pixels);
+  glBindTexture(GL_TEXTURE_2D, 0);
+  SDL_FreeSurface(surface);
+  TTF_CloseFont(font);
+  return std::tuple(width, height, texture);
+}
+
+void draw_text(const std::string& text, int size, int x, int y,
+    const SDL_Color& color) {
+  auto [width, height, texture] = render_text(text, color, size);
+  glBindTexture(GL_TEXTURE_2D, texture);
+  glEnable(GL_BLEND);
+  glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+  glBegin(GL_QUADS);
+  glTexCoord2f(0.f, 0.f);
+  glVertex2f(0.f, 0.f);
+  glTexCoord2f(1.f, 0.f);
+  glVertex2f(static_cast<float>(width), 0.f);
+  glTexCoord2f(1.f, 1.f);
+  glVertex2f(static_cast<float>(width), static_cast<float>(height));
+  glTexCoord2f(0.f, 1.f);
+  glVertex2f(0.f, static_cast<float>(height));
+  glEnd();
+  glDisable(GL_BLEND);
+  glBlendFunc(GL_ONE, GL_ZERO);
+  glBindTexture(GL_TEXTURE_2D, 0);
+  glDeleteTextures(1, &texture);
+}
+
 int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
     LPSTR pCmdLine, int nCmdShow) {
   std::freopen("stdout.log", "w", stdout);
   std::freopen("stderr.log", "w", stderr);
+  if(SDL_Init(SDL_INIT_EVERYTHING) < 0) {
+    std::cout << "Error initializing SDL: " << SDL_GetError() << std::endl;
+    return 1;
+  }
+  TTF_Init();
+  SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
+  SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 1);
   const auto WIDTH = 1920;
   const auto HEIGHT = 1080;
-  SDL_Init(SDL_INIT_VIDEO);
   auto window = SDL_CreateWindow("Software 3D Rasterizer",
-    SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, WIDTH, HEIGHT, 0);
-  auto renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_SOFTWARE);
+    SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, WIDTH, HEIGHT,
+    SDL_WINDOW_OPENGL | SDL_WINDOW_SHOWN);
+  auto gl_context = SDL_GL_CreateContext(window);
+  if(glewInit() != GLEW_OK) {
+    std::cout << "Error initializing GLEW." << std::endl;
+    return 1;
+  }
+  if(SDL_GL_SetSwapInterval(1) < 0) {
+    std::cout <<
+      "Warning: Unable to set VSync: " << SDL_GetError() << std::endl;
+    return 1;
+  }
+  compute::context m_context(compute::opengl_create_shared_context());
+  glViewport(0, 0, WIDTH, HEIGHT);
+  glMatrixMode(GL_PROJECTION);
+  glLoadIdentity();
+  glOrtho(0.0, WIDTH, HEIGHT, 0.0, 1.0, -1.0);
+  glMatrixMode(GL_MODELVIEW);
+  glLoadIdentity();
+  glEnable(GL_TEXTURE_2D);
+  auto texture_id = make_shader(WIDTH, HEIGHT);
+  auto texture =
+    compute::opengl_texture(m_context, GL_TEXTURE_2D, 0, texture_id,
+      compute::opengl_texture::mem_flags::write_only);
+  glClear(GL_COLOR_BUFFER_BIT);
+  glLoadIdentity();
+  glTranslatef(0.f, 0.f, 0.f);
   auto frame_buffer = std::vector<std::uint32_t>(WIDTH * HEIGHT, 0);
   auto depth_buffer =
     std::vector<float>(WIDTH * HEIGHT, std::numeric_limits<float>::infinity());
@@ -212,14 +309,16 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
   auto is_running = true;
   auto event = SDL_Event();
   auto window_id = SDL_GetWindowID(window);
-  auto texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ARGB8888,
-    SDL_TEXTUREACCESS_STREAMING, WIDTH, HEIGHT);
+  auto frames = 0;
+  auto start = std::chrono::high_resolution_clock::now();
   auto last_mouse_x = std::numeric_limits<int>::min();
   auto last_mouse_y = std::numeric_limits<int>::min();
   while(is_running) {
+    ++frames;
     std::fill(frame_buffer.begin(), frame_buffer.end(), 0);
     std::fill(depth_buffer.begin(), depth_buffer.end(),
       std::numeric_limits<float>::infinity());
+    glClear(GL_COLOR_BUFFER_BIT);
     while(SDL_PollEvent(&event)) {
       if(event.type == SDL_WINDOWEVENT && event.window.windowID == window_id &&
           event.window.event == SDL_WINDOWEVENT_CLOSE) {
@@ -254,18 +353,44 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
     last_mouse_x = mouse_x;
     last_mouse_y = mouse_y;
     cube.get_transformation().apply(roll(0.1), cube.get_mesh().m_root);
-    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
-    SDL_RenderClear(renderer);
-    SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
     render(frame_buffer, depth_buffer, camera, cube, WIDTH, HEIGHT);
-    SDL_UpdateTexture(
-      texture, nullptr, frame_buffer.data(), WIDTH * sizeof(std::uint32_t));
-    SDL_RenderClear(renderer);
-    SDL_RenderCopy(renderer, texture, nullptr, nullptr);
-    SDL_RenderPresent(renderer);
+    glBindTexture(GL_TEXTURE_2D, texture_id);
+    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, WIDTH, HEIGHT, GL_RGBA,
+      GL_UNSIGNED_BYTE, frame_buffer.data());
+    glBindTexture(GL_TEXTURE_2D, 0);
+    glBindTexture(GL_TEXTURE_2D, texture_id);
+    glBegin(GL_QUADS);
+    glTexCoord2f(0.f, 0.f);
+    glVertex2f(0.f, 0.f);
+    glTexCoord2f(1.f, 0.f);
+    glVertex2f(static_cast<float>(WIDTH), 0.f);
+    glTexCoord2f(1.f, 1.f);
+    glVertex2f(static_cast<float>(WIDTH), static_cast<float>(HEIGHT));
+    glTexCoord2f(0.f, 1.f);
+    glVertex2f(0.f, static_cast<float>(HEIGHT));
+    glEnd();
+    glBindTexture(GL_TEXTURE_2D, 0);
+    auto info = "Position: " +
+      lexical_cast<std::string>(camera.get_position()) + "\n";
+    info += "Mouse: (" + lexical_cast<std::string>(mouse_x) + ", " +
+      lexical_cast<std::string>(mouse_y) + ")\n";
+    info += "Direction: " + lexical_cast<std::string>(camera.get_direction()) +
+      "\n";
+    info += "Orientation: " +
+      lexical_cast<std::string>(camera.get_orientation()) + "\n";
+    info += "FPS: " + lexical_cast<std::string>(
+      frames / std::chrono::duration_cast<std::chrono::duration<double>>(
+      std::chrono::high_resolution_clock::now() - start).count());
+    draw_text(info, 12, 0, 0, SDL_Color{.g=255, .a=255});
+    SDL_GL_SwapWindow(window);
   }
-  SDL_DestroyRenderer(renderer);
+  auto end = std::chrono::high_resolution_clock::now();
+  std::cout << (
+    frames / std::chrono::duration_cast<std::chrono::duration<double>>(
+      end - start).count()) << std::endl;
   SDL_DestroyWindow(window);
+  SDL_GL_DeleteContext(gl_context);
+  glDeleteTextures(1, &texture_id);
   SDL_Quit();
   return 0;
 }
