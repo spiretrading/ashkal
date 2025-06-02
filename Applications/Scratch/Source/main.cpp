@@ -1,351 +1,237 @@
-#include <array>
-#include <chrono>
-#include <cstdint>
 #include <iostream>
+#include <limits>
 #include <numbers>
+#include <utility>
 #include <vector>
 #include <GL/glew.h>
 #include <SDL.h>
 #include <SDL_ttf.h>
-#include <boost/compute.hpp>
 #include <Windows.h>
-#include <boost/compute/interop/opengl/acquire.hpp>
-#include <boost/compute/interop/opengl/context.hpp>
-#include <boost/compute/interop/opengl/opengl_texture.hpp>
-#include "Ashkal/AmbientLight.hpp"
 #include "Ashkal/Camera.hpp"
-#include "Ashkal/Color.hpp"
-#include "Ashkal/Cube.hpp"
-#include "Ashkal/DirectionalLight.hpp"
-#include "Ashkal/Matrix.hpp"
-#include "Ashkal/Model.hpp"
-#include "Ashkal/Point.hpp"
-#include "Ashkal/Ray.hpp"
-#include "Ashkal/Scene.hpp"
-#include "Ashkal/Sphere.hpp"
-#include "Ashkal/Vector.hpp"
-#include "Ashkal/Voxel.hpp"
+#include "Ashkal/SceneElement.hpp"
 #include "Version.hpp"
 
 using namespace Ashkal;
-using namespace boost;
 
-struct Accelerator {
-  compute::context m_context;
-  compute::command_queue m_queue;
-
-  Accelerator()
-    : m_context(compute::opengl_create_shared_context()),
-      m_queue(m_context, m_context.get_device()) {}
-};
-
-void intersect(const Scene& scene, compute::opengl_texture& texture, int width,
-    int height, Point camera, Vector top_left, Vector x_shift, Vector y_shift,
-    Accelerator& accelerator) {
-  static auto kernel = [&] {
-    static auto source = compute::type_definition<Color>() +
-      compute::type_definition<Voxel>() +
-      compute::type_definition<Point>() +
-      compute::type_definition<Vector>() +
-      compute::type_definition<Ray>() +
-      compute::type_definition<AmbientLight>() +
-      compute::type_definition<DirectionalLight>() +
-      COLOR_CL_SOURCE +
-      POINT_CL_SOURCE +
-      VECTOR_CL_SOURCE +
-      VOXEL_CL_SOURCE +
-      AMBIENT_LIGHT_CL_SOURCE +
-      DIRECTIONAL_LIGHT_CL_SOURCE +
-      RAY_CL_SOURCE +
-      BOOST_COMPUTE_STRINGIZE_SOURCE(
-        typedef struct {
-          int m_width;
-          int m_height;
-          int m_depth;
-          __global Voxel* m_points;
-        } Scene;
-
-        typedef struct {
-          Voxel m_voxel;
-          Point m_position;
-        } VoxelIntersection;
-
-        Voxel get_voxel_from_scene(Scene scene, Point point) {
-          point = floor_point(point);
-          if(point.m_x < 0 || point.m_y < 0 || point.m_z < 0 ||
-              point.m_x >= scene.m_width || point.m_y >= scene.m_height ||
-              point.m_z >= scene.m_depth) {
-            return make_voxel(make_color(0, 0, 0, 255));
-          }
-          size_t index = (size_t)(point.m_x) + scene.m_width *
-            ((size_t)(point.m_y) + scene.m_height * (size_t)(point.m_z));
-          return scene.m_points[index];
-        }
-
-        VoxelIntersection trace(Scene scene, Ray ray) {
-          while(contains(make_point(-64, -64, -2048), make_point(
-              scene.m_width, scene.m_height, scene.m_depth), ray.m_point)) {
-            Voxel voxel = get_voxel_from_scene(scene, ray.m_point);
-            if(!is_none_voxel(voxel)) {
-              VoxelIntersection intersection;
-              intersection.m_voxel = voxel;
-              intersection.m_position = ray.m_point;
-              return intersection;
-            }
-            ray.m_point = compute_boundary(ray, floor_point(ray.m_point), 1);
-          }
-          VoxelIntersection intersection;
-          intersection.m_voxel = make_voxel(make_color(0, 0, 0, 255));
-          intersection.m_position = make_point(0, 0, 0);
-          return intersection;
-        }
-
-        __kernel void intersect(__global Voxel* points, int scene_width,
-            int scene_height, int scene_depth, __write_only image2d_t pixels,
-            Point camera, Vector top_left, Vector x_shift, Vector y_shift,
-            AmbientLight ambient_light, DirectionalLight directional_light) {
-          int x = get_global_id(0);
-          int y = get_global_id(1);
-          int width = get_global_size(0);
-          int height = get_global_size(1);
-          Scene scene;
-          scene.m_width = scene_width;
-          scene.m_height = scene_height;
-          scene.m_depth = scene_depth;
-          scene.m_points = points;
-          Vector direction = sub_vector(add_vector(
-            top_left, mul_int_vector(x, x_shift)), mul_int_vector(y, y_shift));
-          Ray ray;
-          ray.m_point = add_point_vector(camera, direction);
-          ray.m_direction = normalize_vector(direction);
-          VoxelIntersection intersection = trace(scene, ray);
-          if(is_none_voxel(intersection.m_voxel)) {
-            write_imagef(pixels, (int2)(x, y), (float4)(0.f, 0.f, 0.f, 0.f));
-          } else {
-            Color shaded_color =
-              apply_ambient_light(ambient_light, intersection.m_voxel.m_color);
-            shaded_color = add_color(shaded_color,
-              apply_directional_light(directional_light,
-                compute_surface_normal(intersection.m_position,
-                  floor_point(intersection.m_position)),
-                intersection.m_voxel.m_color));
-            write_imagef(pixels, (int2)(x, y), (float4)(
-              shaded_color.m_red / 255.f, shaded_color.m_green / 255.f,
-              shaded_color.m_blue / 255.f, shaded_color.m_alpha / 255.f));
-          }
-        });
-    auto cache =
-      compute::program_cache::get_global_cache(accelerator.m_context);
-    auto key = std::string("__intersect");
-    auto program = cache->get_or_build(key, {}, source, accelerator.m_context);
-    return program.create_kernel("intersect");
-  }();
-  static auto SIZE = 64;
-  static auto s = [&] {
-    auto s = compute::vector<Voxel>(SIZE * SIZE * SIZE, accelerator.m_context);
-    auto host = std::vector<Voxel>();
-    host.resize(SIZE * SIZE * SIZE, Voxel::NONE());
-    for(auto x = 0; x < SIZE; ++x) {
-      for(auto y = 0; y < SIZE; ++y) {
-        for(auto z = 0; z < SIZE; ++z) {
-          host[x + SIZE * (y + SIZE * z)] = scene.get(Point(
-            static_cast<float>(x), static_cast<float>(y),
-            static_cast<float>(z)));
-        }
-      }
-    }
-    compute::copy(host.begin(), host.end(), s.begin(), accelerator.m_queue);
-    return s;
-  }();
-  kernel.set_arg(0, s.get_buffer());
-  kernel.set_arg(1, SIZE);
-  kernel.set_arg(2, SIZE);
-  kernel.set_arg(3, SIZE);
-  kernel.set_arg(4, texture);
-  kernel.set_arg(5, sizeof(Point), &camera);
-  kernel.set_arg(6, sizeof(Vector), &top_left);
-  kernel.set_arg(7, sizeof(Vector), &x_shift);
-  kernel.set_arg(8, sizeof(Vector), &y_shift);
-  auto ambient_light = scene.get_ambient_light();
-  kernel.set_arg(9, sizeof(AmbientLight), &ambient_light);
-  auto directional_light = scene.get_directional_light();
-  kernel.set_arg(10, sizeof(DirectionalLight), &directional_light);
-  glFinish();
-  compute::opengl_enqueue_acquire_gl_objects(1, &texture.get(),
-    accelerator.m_queue);
-  accelerator.m_queue.enqueue_nd_range_kernel(kernel, 2, nullptr,
-    compute::dim(width, height).data(), nullptr);
-  compute::opengl_enqueue_release_gl_objects(1, &texture.get(),
-    accelerator.m_queue);
-  accelerator.m_queue.finish();
+Point transform(const Point& point, const Camera& camera) {
+  auto rel = point - camera.get_position();
+  return Point(dot(rel, camera.get_right()),
+    dot(rel, camera.get_orientation()), dot(rel, -camera.get_direction()));
 }
 
-void render_gpu(const Scene& scene, Accelerator& accelerator,
-    compute::opengl_texture& texture, int width, int height,
-    const Camera& camera) {
-  auto aspect_ratio = static_cast<float>(height) / width;
-  auto roll = cross(camera.get_orientation(), camera.get_direction());
-  auto top_left =
-    camera.get_direction() - roll + aspect_ratio * camera.get_orientation();
-  auto x_shift = (2.f / width) * roll;
-  auto y_shift = (2.f * aspect_ratio / height) * camera.get_orientation();
-  intersect(scene, texture, width, height, camera.get_position(), top_left,
-    x_shift, y_shift, accelerator);
+std::pair<int, int> project_to_screen(
+    const Point& point, int width, int height) {
+  if(point.m_z >= 0) {
+    return {-1, -1};
+  }
+  auto x = point.m_x / -point.m_z;
+  auto y = point.m_y / -point.m_z;
+  auto px = int((x + 1) * 0.5f * width);
+  auto py = int((1 - (y + 1) * 0.5f) * height);
+  return std::pair(px, py);
 }
 
-void render_cpu(const Scene& scene, Accelerator& accelerator,
-    compute::opengl_texture& texture, GLuint texture_id, int width, int height,
-    const Camera& camera) {
-  auto aspect_ratio = static_cast<float>(height) / width;
-  auto roll = cross(camera.get_orientation(), camera.get_direction());
-  auto top_left =
-    camera.get_direction() - roll + aspect_ratio * camera.get_orientation();
-  auto x_shift = (2.f / width) * roll;
-  auto y_shift = (2.f * aspect_ratio / height) * camera.get_orientation();
-  auto pixels = std::vector<Color>();
-  pixels.reserve(width * height);
-  for(auto y = 0; y < height; ++y) {
-    for(auto x = 0; x < width; ++x) {
-      auto direction = top_left + x * x_shift - y * y_shift;
-      auto point = camera.get_position() + direction;
-      auto voxel = scene.intersect(point, normalize(direction)).m_voxel;
-      if(voxel == Voxel::NONE()) {
-        pixels.push_back(Color(0, 0, 0));
-      } else {
-        pixels.push_back(voxel.m_color);
+float compute_edge(const std::pair<int, int>& p1,
+    const std::pair<int, int>& p2, const std::pair<int, int>& p) {
+  return (p2.first - p1.first) * (p.second - p1.second) -
+    (p2.second - p1.second) * (p.first - p1.first);
+}
+
+Color lerp(Color a, Color b, float t) {
+  return Color(std::lerp(a.m_red, b.m_red, t),
+    std::lerp(a.m_green, b.m_green, t), std::lerp(a.m_blue, b.m_blue, t),
+    std::lerp(a.m_alpha, b.m_alpha, t));
+}
+
+void render(std::vector<std::uint32_t>& frame_buffer, const Camera& camera,
+    const std::vector<Vertex>& vertices, const MeshTriangle& triangle,
+    const Matrix& transformation, int width, int height) {
+  auto& a = vertices[triangle.m_a];
+  auto& b = vertices[triangle.m_b];
+  auto& c = vertices[triangle.m_c];
+  auto a_position = transform(transformation * a.m_position, camera);
+  auto b_position = transform(transformation * b.m_position, camera);
+  auto c_position = transform(transformation * c.m_position, camera);
+  auto a_screen = project_to_screen(a_position, width, height);
+  auto b_screen = project_to_screen(b_position, width, height);
+  auto c_screen = project_to_screen(c_position, width, height);
+  if(a_screen.first < 0 || b_screen.first < 0 || c_screen.first < 0) {
+    return;
+  }
+  auto min_x =
+    std::max(0, std::min({a_screen.first, b_screen.first, c_screen.first}));
+  auto max_x = std::min(
+    width - 1, std::max({a_screen.first, b_screen.first, c_screen.first}));
+  auto min_y =
+    std::max(0, std::min({a_screen.second, b_screen.second, c_screen.second}));
+  auto max_y = std::min(
+    height - 1, std::max({a_screen.second, b_screen.second, c_screen.second}));
+  for(auto y = min_y; y <= max_y; ++y) {
+    for(auto x = min_x; x <= max_x; ++x) {
+      auto p = std::pair(x, y);
+      auto w0 = compute_edge(b_screen, c_screen, p);
+      auto w1 = compute_edge(c_screen, a_screen, p);
+      auto w2 = compute_edge(a_screen, b_screen, p);
+      if(w0 >= 0 && w1 >= 0 && w2 >= 0) {
+        auto c01 = lerp(a.m_color, b.m_color, w1 / (w0 + w1 + w2));
+        auto finalC = lerp(c01, c.m_color, w2 / (w0 + w1 + w2));
+        auto pixel = (std::uint32_t(finalC.m_alpha) << 24) |
+                          (std::uint32_t(finalC.m_red)   << 16) |
+                          (std::uint32_t(finalC.m_green) << 8 ) |
+                          (std::uint32_t(finalC.m_blue));
+        frame_buffer[y * width + x] = pixel;
       }
     }
   }
-  glBindTexture(GL_TEXTURE_2D, texture_id);
-  glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, width, height, GL_RGBA,
-    GL_UNSIGNED_BYTE, pixels.data());
-  glBindTexture(GL_TEXTURE_2D, 0);
 }
 
-auto make_shader(int width, int height) {
-  auto texture_id = GLuint();
-  glGenTextures(1, &texture_id);
-  glBindTexture(GL_TEXTURE_2D, texture_id);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA,
-    GL_UNSIGNED_BYTE, nullptr);
-  glBindTexture(GL_TEXTURE_2D, 0);
-  return texture_id;
-}
-
-auto render_text(const std::string& message, SDL_Color color, int font_size) {
-  auto texture = GLuint(0);
-  auto font = TTF_OpenFont("C:\\Windows\\Fonts\\arial.ttf", font_size);
-  if(!font) {
-    return std::tuple(0, 0, texture);
+void render(std::vector<std::uint32_t>& frame_buffer, const Camera& camera,
+    const std::vector<Vertex>& vertices,
+    const std::vector<MeshTriangle>& triangles, const Matrix& transformation,
+    int width, int height) {
+  for(auto& triangle : triangles) {
+    render(frame_buffer, camera, vertices, triangle, transformation, width,
+      height);
   }
-  auto surface = TTF_RenderText_Blended(font, message.c_str(), color);
-  if(!surface) {
-    TTF_CloseFont(font);
-    return std::tuple(0, 0, texture);
-  }
-  glGenTextures(1, &texture);
-  glBindTexture(GL_TEXTURE_2D, texture);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-  auto width = surface->w;
-  auto height = surface->h;
-  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_BGRA,
-    GL_UNSIGNED_BYTE, surface->pixels);
-  glBindTexture(GL_TEXTURE_2D, 0);
-  SDL_FreeSurface(surface);
-  TTF_CloseFont(font);
-  return std::tuple(width, height, texture);
 }
 
-void draw_text(const std::string& text, int size, int x, int y,
-    const SDL_Color& color) {
-  auto [width, height, texture] = render_text(text, color, size);
-  glBindTexture(GL_TEXTURE_2D, texture);
-  glEnable(GL_BLEND);
-  glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-  glBegin(GL_QUADS);
-  glTexCoord2f(0.f, 0.f);
-  glVertex2f(0.f, 0.f);
-  glTexCoord2f(1.f, 0.f);
-  glVertex2f(static_cast<float>(width), 0.f);
-  glTexCoord2f(1.f, 1.f);
-  glVertex2f(static_cast<float>(width), static_cast<float>(height));
-  glTexCoord2f(0.f, 1.f);
-  glVertex2f(0.f, static_cast<float>(height));
-  glEnd();
-  glDisable(GL_BLEND);
-  glBlendFunc(GL_ONE, GL_ZERO);
-  glBindTexture(GL_TEXTURE_2D, 0);
-  glDeleteTextures(1, &texture);
+void render(std::vector<std::uint32_t>& frame_buffer, const Camera& camera,
+    const std::vector<Vertex>& vertices, const MeshNode& node,
+    const Transformation& transformation, const Matrix& parent_transformation,
+    int width, int height) {
+  auto next_transformation =
+    parent_transformation * transformation.get_transformation(node);
+  if(node.get_type() == MeshNode::Type::CHUNK) {
+    for(auto& child : node.as_chunk()) {
+      render(frame_buffer, camera, vertices, child, transformation,
+        next_transformation, width, height);
+    }
+  } else {
+    render(frame_buffer, camera, vertices, node.as_triangles(),
+      next_transformation, width, height);
+  }
+}
+
+void render(std::vector<std::uint32_t>& frame_buffer, const Camera& camera,
+    const Mesh& mesh, const Transformation& transformation, int width,
+    int height) {
+  render(frame_buffer, camera, mesh.m_vertices, mesh.m_root, transformation,
+    Matrix::IDENTITY(), width, height);
+}
+
+void render(std::vector<std::uint32_t>& frame_buffer, const Camera& camera,
+    const SceneElement& element, int width, int height) {
+  render(frame_buffer, camera, element.get_mesh(), element.get_transformation(),
+    width, height);
+}
+
+Mesh make_cube() {
+  auto vertices = std::vector<Vertex>();
+  vertices.reserve(24);
+  auto triangles = std::vector<MeshTriangle>();
+  triangles.reserve(12);
+  auto addVertex = [&] (float x, float y, float z,
+      float nx, float ny, float nz, Color c) {
+    vertices.push_back(Vertex(Point(x, y, z), Vector(nx, ny, nz), c));
+  };
+  auto white = Color(255, 255, 255, 255);
+  auto red = Color(255, 0, 0, 255);
+  auto green = Color(0, 255, 0, 255);
+  auto blue = Color(0, 0, 255, 255);
+
+  // +X face (normal = {1,0,0})
+  //  (1, -1, -1), (1, 1, -1), (1, 1, 1), (1, -1, 1)
+  addVertex(1, -1, -1, 1, 0, 0, white); // idx  0
+  addVertex(1, 1, -1, 1, 0, 0, red); // idx  1
+  addVertex(1, 1, 1, 1, 0, 0, green); // idx  2
+  addVertex(1, -1, 1, 1, 0, 0, blue); // idx  3
+
+  // -X face (normal = {-1,0,0})
+  //  (-1, -1,  1), (-1,  1,  1), (-1,  1, -1), (-1, -1, -1)
+  addVertex(-1, -1, 1, -1, 0, 0, blue); // idx  4
+  addVertex(-1, 1, 1, -1, 0, 0, red); // idx  5
+  addVertex(-1, 1, -1, -1, 0, 0, green); // idx  6
+  addVertex(-1, -1, -1, -1, 0, 0, white); // idx  7
+
+  // +Y face (normal = {0,1,0})
+  //  (-1, 1, -1), (1, 1, -1), (1, 1, 1), (-1, 1, 1)
+  addVertex(-1, 1, -1, 0, 1, 0, red); // idx  8
+  addVertex( 1, 1, -1, 0, 1, 0, blue); // idx  9
+  addVertex( 1, 1, 1, 0, 1, 0, white); // idx 10
+  addVertex(-1, 1, 1, 0, 1, 0, green); // idx 11
+
+  // -Y face (normal = {0,-1,0})
+  //  (-1, -1,  1), (1, -1,  1), (1, -1, -1), (-1, -1, -1)
+  addVertex(-1, -1, 1, 0,-1, 0, red); // idx 12
+  addVertex( 1, -1, 1, 0,-1, 0, green); // idx 13
+  addVertex( 1, -1, -1, 0,-1, 0, blue); // idx 14
+  addVertex(-1, -1, -1, 0,-1, 0, white); // idx 15
+
+  // +Z face (normal = {0,0,1})
+  //  (-1, -1, 1), (1, -1, 1), (1, 1, 1), (-1, 1, 1)
+  addVertex(-1, -1, 1, 0, 0, 1, blue); // idx 16
+  addVertex( 1, -1, 1, 0, 0, 1, green); // idx 17
+  addVertex( 1,  1, 1, 0, 0, 1, white); // idx 18
+  addVertex(-1,  1, 1, 0, 0, 1, red); // idx 19
+
+  // -Z face (normal = {0,0,-1})
+  //  (1, -1, -1), (-1, -1, -1), (-1, 1, -1), (1, 1, -1)
+  addVertex( 1, -1, -1, 0, 0,-1, blue); // idx 20
+  addVertex(-1, -1, -1, 0, 0,-1, red); // idx 21
+  addVertex(-1,  1, -1, 0, 0,-1, green); // idx 22
+  addVertex( 1,  1, -1, 0, 0,-1, white); // idx 23
+
+    // Now add 12 triangles (two per face), using the indices above:
+
+  // +X face: (0,1,2), (0,2,3)
+  triangles.push_back({0, 1, 2});
+  triangles.push_back({0, 2, 3});
+
+  // -X face: (4,5,6), (4,6,7)
+  triangles.push_back({4, 5, 6});
+  triangles.push_back({4, 6, 7});
+
+  // +Y face: ( 8,  9, 10), ( 8, 10, 11)
+  triangles.push_back({8, 9, 10});
+  triangles.push_back({8, 10, 11});
+
+  // -Y face: (12, 13, 14), (12, 14, 15)
+  triangles.push_back({12, 13, 14});
+  triangles.push_back({12, 14, 15});
+
+  // +Z face: (16, 17, 18), (16, 18, 19)
+  triangles.push_back({16, 17, 18});
+  triangles.push_back({16, 18, 19});
+
+  // -Z face: (20, 21, 22), (20, 22, 23)
+  triangles.push_back({20, 21, 22});
+  triangles.push_back({20, 22, 23});
+
+  return Mesh(std::move(vertices), MeshNode(std::move(triangles)));
 }
 
 int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
     LPSTR pCmdLine, int nCmdShow) {
-  freopen("stdout.log", "w", stdout);
-  freopen("stderr.log", "w", stderr);
-  if(SDL_Init(SDL_INIT_EVERYTHING) < 0) {
-    std::cout << "Error initializing SDL: " << SDL_GetError() << std::endl;
-    return 1;
-  }
-  TTF_Init();
-  SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
-  SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 1);
-  auto width = 1920;
-  auto height = 1080;
-  auto window = SDL_CreateWindow("Example", SDL_WINDOWPOS_UNDEFINED,
-    SDL_WINDOWPOS_UNDEFINED, width, height,
-    SDL_WINDOW_OPENGL | SDL_WINDOW_SHOWN);
-  if(!window) {
-    std::cout << "Error creating window: " << SDL_GetError() << std::endl;
-    return 1;
-  }
-  auto gl_context = SDL_GL_CreateContext(window);
-  if(glewInit() != GLEW_OK) {
-    std::cout << "Error initializing GLEW." << std::endl;
-    return 1;
-  }
-  if(SDL_GL_SetSwapInterval(1) < 0) {
-    std::cout <<
-      "Warning: Unable to set VSync: " << SDL_GetError() << std::endl;
-    return 1;
-  }
-  auto accelerator = Accelerator();
-  glViewport(0, 0, width, height);
-  glMatrixMode(GL_PROJECTION);
-  glLoadIdentity();
-  glOrtho(0.0, width, height, 0.0, 1.0, -1.0);
-  glMatrixMode(GL_MODELVIEW);
-  glLoadIdentity();
-  glEnable(GL_TEXTURE_2D);
-  auto texture_id = make_shader(width, height);
-  auto texture =
-    compute::opengl_texture(accelerator.m_context, GL_TEXTURE_2D, 0, texture_id,
-      compute::opengl_texture::mem_flags::write_only);
-  glClear(GL_COLOR_BUFFER_BIT);
-  glLoadIdentity();
-  glTranslatef(0.f, 0.f, 0.f);
-  auto scene = Scene();
-  scene.set(AmbientLight(Color(255, 255, 255, 0), 0.5));
-  scene.set(DirectionalLight(Vector(0, 0, 1), Color(255, 255, 255, 0), 1.f));
-//  auto shape = std::make_shared<Sphere>(10, Color(255, 0, 0, 0));
-  auto shape = std::make_shared<Cube>(1, Color(255, 0, 0, 0));
-  scene.add(shape);
-  auto camera =
-    Camera(Point(9.5f, 9.5f, -29), Vector(0, 0, 1), Vector(0, 1, 0));
-  auto running = true;
+  std::freopen("stdout.log", "w", stdout);
+  std::freopen("stderr.log", "w", stderr);
+  const auto WIDTH = 1920;
+  const auto HEIGHT = 1080;
+  SDL_Init(SDL_INIT_VIDEO);
+  auto window = SDL_CreateWindow("Software 3D Rasterizer",
+    SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, WIDTH, HEIGHT, 0);
+  auto renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_SOFTWARE);
+  auto frame_buffer = std::vector<std::uint32_t>(WIDTH * HEIGHT, 0);
+  auto camera = Camera(Point(0, 0, 10), Vector(0, 0, -1), Vector(0, 1, 0));
+  auto cube = SceneElement(make_cube());
+  auto is_running = true;
   auto event = SDL_Event();
   auto window_id = SDL_GetWindowID(window);
-  auto frames = 0;
-  auto start = std::chrono::high_resolution_clock::now();
+  auto texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ARGB8888,
+    SDL_TEXTUREACCESS_STREAMING, WIDTH, HEIGHT);
   auto last_mouse_x = std::numeric_limits<int>::min();
   auto last_mouse_y = std::numeric_limits<int>::min();
-  while(running) {
-    glClear(GL_COLOR_BUFFER_BIT);
-    ++frames;
+  while(is_running) {
+    std::fill(frame_buffer.begin(), frame_buffer.end(), 0x00000000);
     if(SDL_PollEvent(&event)) {
       switch(event.type) {
         case SDL_WINDOWEVENT:
@@ -359,7 +245,7 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
           }
           break;
         case SDL_QUIT:
-          running = false;
+          is_running = false;
           break;
       }
     }
@@ -379,42 +265,28 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
     SDL_GetMouseState(&mouse_x, &mouse_y);
     if(last_mouse_x != std::numeric_limits<int>::min() &&
         !state[SDL_SCANCODE_LALT] && !state[SDL_SCANCODE_RALT]) {
-      auto delta_x = ((mouse_x - last_mouse_x) / (width / 2.f)) * (std::numbers::pi_v<float> / 2);
-      auto delta_y = ((mouse_y - last_mouse_y) / (height / 2.f)) * (std::numbers::pi_v<float> / 2);
+      auto delta_x = ((mouse_x - last_mouse_x) / (WIDTH / 2.f)) *
+        (std::numbers::pi_v<float> / 2);
+      auto delta_y = ((mouse_y - last_mouse_y) / (HEIGHT / 2.f)) *
+        (std::numbers::pi_v<float> / 2);
       tilt(camera, delta_x, delta_y);
     }
     last_mouse_x = mouse_x;
     last_mouse_y = mouse_y;
-    render_gpu(scene, accelerator, texture, width, height, camera);
-//    render_cpu(scene, accelerator, texture, texture_id, width, height, camera);
-    glBindTexture(GL_TEXTURE_2D, texture_id);
-    glBegin(GL_QUADS);
-    glTexCoord2f(0.f, 0.f);
-    glVertex2f(0.f, 0.f);
-    glTexCoord2f(1.f, 0.f);
-    glVertex2f(static_cast<float>(width), 0.f);
-    glTexCoord2f(1.f, 1.f);
-    glVertex2f(static_cast<float>(width), static_cast<float>(height));
-    glTexCoord2f(0.f, 1.f);
-    glVertex2f(0.f, static_cast<float>(height));
-    glEnd();
-    glBindTexture(GL_TEXTURE_2D, 0);
-    auto info = "Position: " +
-      lexical_cast<std::string>(camera.get_position()) + "\n";
-    info += "Mouse: (" + lexical_cast<std::string>(mouse_x) + ", " +
-      lexical_cast<std::string>(mouse_y) + ")\n";
-    info += "Direction: " + lexical_cast<std::string>(camera.get_direction()) +
-      "\n";
-    info += "Orientation: " +
-      lexical_cast<std::string>(camera.get_orientation()) + "\n";
-    draw_text(info, 12, 0, 0, SDL_Color{.g=255, .a=255});
-    SDL_GL_SwapWindow(window);
+//    cube.get_transformation().apply(roll(0.1), cube.get_mesh().m_root);
+    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+    SDL_RenderClear(renderer);
+    SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
+    render(frame_buffer, camera, cube, WIDTH, HEIGHT);
+    SDL_UpdateTexture(
+      texture, nullptr, frame_buffer.data(), WIDTH * sizeof(std::uint32_t));
+    SDL_RenderClear(renderer);
+    SDL_RenderCopy(renderer, texture, nullptr, nullptr);
+    SDL_RenderPresent(renderer);
+    SDL_Delay(32);
   }
-  auto end = std::chrono::high_resolution_clock::now();
-  std::cout << (frames / std::chrono::duration_cast<std::chrono::duration<double>>(end - start).count()) << std::endl;
+  SDL_DestroyRenderer(renderer);
   SDL_DestroyWindow(window);
-  SDL_GL_DeleteContext(gl_context);
-  glDeleteTextures(1, &texture_id);
   SDL_Quit();
   return 0;
 }

@@ -21,7 +21,7 @@ namespace Ashkal {
     /** The color's blue component. */
     std::uint8_t m_blue;
 
-    /** The color's alpha/transparancy component. */
+    /** The color's alpha/transparency component. */
     std::uint8_t m_alpha;
 
     friend auto operator <=>(const Color&, const Color&) = default;

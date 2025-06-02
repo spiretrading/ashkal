@@ -260,6 +260,26 @@ namespace Ashkal {
     return translation;
   }
 
+  inline Matrix rotate(const Vector& axis, float radians) {
+    auto x = axis.m_x;
+    auto y = axis.m_y;
+    auto z = axis.m_z;
+    auto c = std::cos(radians);
+    auto s = std::sin(radians);
+    auto t = 1.0f - c;
+    auto transform = Matrix::IDENTITY();
+    transform.set(0, 0, t * x * x + c);
+    transform.set(0, 1, t * x * y - s * z);
+    transform.set(0, 2, t * x * z + s * y);
+    transform.set(1, 0, t * x * y + s * z);
+    transform.set(1, 1, t * y * y + c);
+    transform.set(1, 2, t * y * z - s * x);
+    transform.set(2, 0, t * x * z - s * y);
+    transform.set(2, 1, t * y * z + s * x);
+    transform.set(2, 2, t * z * z + c);
+    return transform;
+  }
+
   inline Matrix pitch(float radians) {
     auto transform = Matrix::IDENTITY();
     transform.set(1, 1, std::cos(radians));
@@ -275,6 +295,15 @@ namespace Ashkal {
     transform.set(0, 2, std::sin(radians));
     transform.set(2, 0, -std::sin(radians));
     transform.set(2, 2, std::cos(radians));
+    return transform;
+  }
+
+  inline Matrix roll(float radians) {
+    auto transform = Matrix::IDENTITY();
+    transform.set(0, 0, std::cos(radians));
+    transform.set(1, 0, -std::sin(radians));
+    transform.set(0, 1, std::sin(radians));
+    transform.set(1, 1, std::cos(radians));
     return transform;
   }
 

@@ -82,6 +82,11 @@ namespace Ashkal {
       pitch(-tilt_y) * translate(-Vector(camera.get_position())));
   }
 
+  /** Rolls the camera. */
+  inline void roll(Camera& camera, float radians) {
+    camera.apply(rotate(camera.get_direction(), radians));
+  }
+
   inline Camera::Camera()
     : m_view_to_world(Matrix::IDENTITY()) {}
 

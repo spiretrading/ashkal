@@ -7,12 +7,12 @@ namespace Ashkal {
   struct Color;
   struct DirectionalLight;
   class Matrix;
-  class Model;
+  struct Mesh;
+  struct MeshNode;
   struct Point;
   struct Ray;
-  class Sphere;
   struct Vector;
-  struct Voxel;
+  struct Vertex;
 }
 
 #endif
