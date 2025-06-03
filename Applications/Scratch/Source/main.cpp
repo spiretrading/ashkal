@@ -102,16 +102,16 @@ void render(std::vector<std::uint32_t>& frame_buffer,
 }
 
 bool isInFront(const Point& P) {
-    return P.m_z < 0.0f;
+    return P.m_z < .5f;
 }
 
 Point intersectNearPlanePoint(const Point& A, const Point& B) {
     const auto NEAR_EPS = 1e-5f;
-    float t = A.m_z / (A.m_z - B.m_z);
+    float t = (A.m_z - .5f) / (A.m_z - B.m_z);
     Point I;
     I.m_x = A.m_x + t * (B.m_x - A.m_x);
     I.m_y = A.m_y + t * (B.m_y - A.m_y);
-    I.m_z = -NEAR_EPS;
+    I.m_z = .5f - NEAR_EPS;
     return I;
 }
 
