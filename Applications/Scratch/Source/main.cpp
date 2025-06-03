@@ -3,6 +3,7 @@
 #include <numbers>
 #include <utility>
 #include <vector>
+#include <immintrin.h>
 #include <boost/compute.hpp>
 #include <GL/glew.h>
 #include <SDL.h>
@@ -26,15 +27,20 @@ Point transform(const Point& point, const Camera& camera) {
 
 std::pair<int, int> project_to_screen(
     const Point& point, int width, int height) {
-  if(point.m_z >= 0) {
-    return std::pair(-1, -1);
+  const auto NEAR_PLANE = 0.001f;
+  const auto EYE_ORIGIN = 1;
+  auto camera = Point(point.m_x, point.m_y, point.m_z - EYE_ORIGIN);
+  if(camera.m_z >= 0) {
+    camera.m_z = -NEAR_PLANE;
   }
-  auto perspective = 1.0f / -point.m_z;
-  auto aspect_ratio = float(width) / float(height);
-  auto x = (point.m_x * perspective) / aspect_ratio;
-  auto y = point.m_y * perspective;
-  auto screen_x = int((x + 1.0f) * 0.5f * width);
-  auto screen_y = int((1.0f - (y + 1.0f) * 0.5f) * height);
+  auto perspective = 1 / -camera.m_z;
+  auto aspect_ratio = float(width) / height;
+  auto normalized_x = (camera.m_x * perspective) / aspect_ratio;
+  auto normalized_y = camera.m_y * perspective;
+  auto fx = (normalized_x + 1) * 0.5f * width;
+  auto fy = (1 - (normalized_y + 1) * 0.5f) * height;
+  auto screen_x = int(std::round(fx));
+  auto screen_y = int(std::round(fy));
   return std::pair(screen_x, screen_y);
 }
 
@@ -51,21 +57,12 @@ Color lerp(Color a, Color b, float t) {
 }
 
 void render(std::vector<std::uint32_t>& frame_buffer,
-    std::vector<float>& depth_buffer, const Camera& camera,
-    const std::vector<Vertex>& vertices, const MeshTriangle& triangle,
-    const Matrix& transformation, int width, int height) {
-  auto& a = vertices[triangle.m_a];
-  auto& b = vertices[triangle.m_b];
-  auto& c = vertices[triangle.m_c];
-  auto camera_a = transform(transformation * a.m_position, camera);
-  auto camera_b = transform(transformation * b.m_position, camera);
-  auto camera_c = transform(transformation * c.m_position, camera);
+    std::vector<float>& depth_buffer, const Vertex& a, const Vertex& b,
+    const Vertex& c, const Point& camera_a, const Point& camera_b,
+    const Point& camera_c, int width, int height) {
   auto screen_a = project_to_screen(camera_a, width, height);
   auto screen_b = project_to_screen(camera_b, width, height);
   auto screen_c = project_to_screen(camera_c, width, height);
-  if(screen_a.first < 0 || screen_b.first < 0 || screen_c.first < 0) {
-    return;
-  }
   auto min_x =
     std::max(0, std::min({screen_a.first, screen_b.first, screen_c.first}));
   auto max_x = std::min(
@@ -101,6 +98,101 @@ void render(std::vector<std::uint32_t>& frame_buffer,
         }
       }
     }
+  }
+}
+
+bool isInFront(const Point& P) {
+    return P.m_z < 0.0f;
+}
+
+Point intersectNearPlanePoint(const Point& A, const Point& B) {
+    const auto NEAR_EPS = 1e-5f;
+    float t = A.m_z / (A.m_z - B.m_z);
+    Point I;
+    I.m_x = A.m_x + t * (B.m_x - A.m_x);
+    I.m_y = A.m_y + t * (B.m_y - A.m_y);
+    I.m_z = -NEAR_EPS;
+    return I;
+}
+
+Color intersectNearPlaneColor(const Point& Apos, const Color& Acol,
+  const Point& Bpos, const Color& Bcol) {
+  return Acol;
+/*
+    float t = Apos.m_z / (Apos.m_z - Bpos.m_z);
+    Color cA = Acol * (1.0f - t);
+    Color cB = Bcol * (t);
+    return { uint8_t(std::round(cA.m_red   + cB.m_red)),
+             uint8_t(std::round(cA.m_green + cB.m_green)),
+             uint8_t(std::round(cA.m_blue  + cB.m_blue)),
+             uint8_t(std::round(cA.m_alpha + cB.m_alpha)) };
+*/
+}
+
+int clip(const Vertex& a, const Vertex& b, const Vertex& c, Point camera_a,
+    Point camera_b, Point camera_c, std::array<Vertex, 4>& clipped_vertices,
+    std::array<Point, 4>& clipped_points) {
+  auto n = 0;
+  auto processEdge = [&] (
+      const Vertex& v0, const Vertex& v1, const Point& p0, const Point& p1) {
+    auto color_0 = v0.m_color;
+    auto color_1 = v1.m_color;
+    auto in0 = isInFront(p0);
+    auto in1 = isInFront(p1);
+    if(in0 && in1) {
+      clipped_points[n] = p1;
+      clipped_vertices[n].m_color = color_1;
+      ++n;
+    } else if(in0 && !in1) {
+      clipped_points[n] = intersectNearPlanePoint(p0, p1);
+      clipped_vertices[n].m_color =
+        intersectNearPlaneColor(p0, color_0, p1, color_1);
+      ++n;
+    } else if(!in0 && in1) {
+      clipped_points[n] = intersectNearPlanePoint(p0, p1);
+      clipped_vertices[n].m_color =
+        intersectNearPlaneColor(p0, color_0, p1, color_1);
+      ++n;
+      clipped_points[n] = p1;
+      clipped_vertices[n].m_color = color_1;
+      ++n;
+    }
+  };
+  processEdge(a, b, camera_a, camera_b);
+  processEdge(b, c, camera_b, camera_c);
+  processEdge(c, a, camera_c, camera_a);
+  return n;
+}
+
+void render(std::vector<std::uint32_t>& frame_buffer,
+    std::vector<float>& depth_buffer, const Camera& camera,
+    const std::vector<Vertex>& vertices, const MeshTriangle& triangle,
+    const Matrix& transformation, int width, int height) {
+  auto& a = vertices[triangle.m_a];
+  auto& b = vertices[triangle.m_b];
+  auto& c = vertices[triangle.m_c];
+  auto camera_a = transform(transformation * a.m_position, camera);
+  auto camera_b = transform(transformation * b.m_position, camera);
+  auto camera_c = transform(transformation * c.m_position, camera);
+  if(camera_a.m_z < 0 && camera_b.m_z < 0 && camera_c.m_z < 0) {
+    render(frame_buffer, depth_buffer, a, b, c, camera_a, camera_b, camera_c,
+      width, height);
+    return;
+  }
+  auto clipped_points = std::array<Point, 4>();
+  auto clipped_vertices = std::array<Vertex, 4>();
+  auto clipped_count = clip(
+    a, b, c, camera_a, camera_b, camera_c, clipped_vertices, clipped_points);
+  if(clipped_count < 3) {
+    return;
+  }
+  render(frame_buffer, depth_buffer, clipped_vertices[0], clipped_vertices[1],
+    clipped_vertices[2], clipped_points[0], clipped_points[1],
+    clipped_points[2], width, height);
+  if(clipped_count == 4) {
+    render(frame_buffer, depth_buffer, clipped_vertices[0], clipped_vertices[2],
+      clipped_vertices[3], clipped_points[0], clipped_points[2],
+      clipped_points[3], width, height);
   }
 }
 
@@ -195,6 +287,13 @@ Mesh make_cube(Color color) {
   return Mesh(std::move(vertices), MeshNode(std::move(triangles)));
 }
 
+std::vector<std::unique_ptr<SceneElement>> make_cube_scene() {
+  auto elements = std::vector<std::unique_ptr<SceneElement>>();
+  elements.push_back(
+    std::make_unique<SceneElement>(make_cube(Color(0, 0, 255, 255))));
+  return elements;
+}
+
 std::vector<std::vector<int>> level_map = {
   {1,1,1,1,1,1,1,1},
   {1,0,0,0,0,0,0,1},
@@ -205,27 +304,21 @@ std::vector<std::vector<int>> level_map = {
 
 std::vector<std::unique_ptr<SceneElement>> make_scene(
     const std::vector<std::vector<int>>& scene) {
-    std::vector<std::unique_ptr<SceneElement>> elements;
-    int depth = int(scene.size());
-
-    for (int y = 0; y < depth; ++y) {
-        for (int x = 0; x < int(scene[y].size()); ++x) {
-            if (scene[y][x] == 1) {
-                // create a blue cube
-                auto element = std::make_unique<SceneElement>(
-                    make_cube(Color{0, 0, 255, 255})
-                );
-
-                // place its origin at (2*x, 1, -2*(depth - y))
-                // (so that the cube sits with its bottom at y=0)
-                Matrix T = translate(Vector{ 2.0f*float(x), 1.0f, -2.0f*(float(depth)-float(y)) });
-                element->get_transformation().apply(T, element->get_mesh().m_root);
-
-                elements.push_back(std::move(element));
-            }
-        }
+  auto elements = std::vector<std::unique_ptr<SceneElement>>();
+  auto depth = int(scene.size());
+  for(auto y = 0; y < depth; ++y) {
+    for(auto x = 0; x < int(scene[y].size()); ++x) {
+      if(scene[y][x] == 1) {
+        auto element =
+          std::make_unique<SceneElement>(make_cube(Color(0, 0, 255, 255)));
+        element->get_transformation().apply(
+          translate(Vector(2 * x, 1, -2 * (depth - y))),
+          element->get_mesh().m_root);
+        elements.push_back(std::move(element));
+      }
     }
-    return elements;
+  }
+  return elements;
 }
 
 auto make_shader(int width, int height) {
@@ -300,11 +393,18 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
   TTF_Init();
   SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
   SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 1);
-  const auto WIDTH = 1920;
-  const auto HEIGHT = 1080;
-  auto window = SDL_CreateWindow("Software 3D Rasterizer",
-    SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, WIDTH, HEIGHT,
+  const auto WIDTH = 640;
+  const auto HEIGHT = 480;
+  auto window = SDL_CreateWindow("Example", SDL_WINDOWPOS_UNDEFINED,
+    SDL_WINDOWPOS_UNDEFINED, WIDTH, HEIGHT,
     SDL_WINDOW_OPENGL | SDL_WINDOW_SHOWN);
+  if(!window) {
+    std::cout << "Error creating window: " << SDL_GetError() << std::endl;
+    return 1;
+  }
+  SDL_ShowCursor(SDL_DISABLE);
+  SDL_SetWindowGrab(window, SDL_TRUE);
+  SDL_SetRelativeMouseMode(SDL_TRUE);
   auto gl_context = SDL_GL_CreateContext(window);
   if(glewInit() != GLEW_OK) {
     std::cout << "Error initializing GLEW." << std::endl;
@@ -338,6 +438,7 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
   auto cy = 2;
   auto camera = Camera(
     Point(2 * cx, 1, -2 * (depth - cy)), Vector(0, 0, -1), Vector(0, 1, 0));
+//  auto scene = make_cube_scene();
   auto scene = make_scene(level_map);
   auto is_running = true;
   auto event = SDL_Event();
@@ -345,8 +446,6 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
   auto frame_count = 0;
   auto start_time = std::chrono::high_resolution_clock::now();
   auto fps = 0.f;
-  auto last_mouse_x = std::numeric_limits<int>::min();
-  auto last_mouse_y = std::numeric_limits<int>::min();
   while(is_running) {
     ++frame_count;
     std::fill(frame_buffer.begin(), frame_buffer.end(), 0);
@@ -363,6 +462,9 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
       }
     }
     auto state = SDL_GetKeyboardState(nullptr);
+    if(state[SDL_SCANCODE_ESCAPE]) {
+      is_running = false;
+    }
     if(state[SDL_SCANCODE_W] || state[SDL_SCANCODE_UP]) {
       move_forward(camera, 1 / 10.f);
     } else if(state[SDL_SCANCODE_S] || state[SDL_SCANCODE_DOWN]) {
