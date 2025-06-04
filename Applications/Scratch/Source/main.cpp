@@ -13,7 +13,7 @@
 #include <boost/compute/interop/opengl/context.hpp>
 #include <boost/compute/interop/opengl/opengl_texture.hpp>
 #include "Ashkal/Camera.hpp"
-#include "Ashkal/SceneElement.hpp"
+#include "Ashkal/Scene.hpp"
 #include "Version.hpp"
 
 using namespace Ashkal;
@@ -56,10 +56,10 @@ Color lerp(Color a, Color b, float t) {
     std::lerp(a.m_alpha, b.m_alpha, t));
 }
 
-void render(std::vector<std::uint32_t>& frame_buffer,
-    std::vector<float>& depth_buffer, const Vertex& a, const Vertex& b,
-    const Vertex& c, const Point& camera_a, const Point& camera_b,
-    const Point& camera_c, int width, int height) {
+void render(const Vertex& a, const Vertex& b, const Vertex& c,
+    const Point& camera_a, const Point& camera_b, const Point& camera_c,
+    std::vector<std::uint32_t>& frame_buffer, std::vector<float>& depth_buffer,
+    int width, int height) {
   auto screen_a = project_to_screen(camera_a, width, height);
   auto screen_b = project_to_screen(camera_b, width, height);
   auto screen_c = project_to_screen(camera_c, width, height);
@@ -163,10 +163,11 @@ int clip(const Vertex& a, const Vertex& b, const Vertex& c, Point camera_a,
   return n;
 }
 
-void render(std::vector<std::uint32_t>& frame_buffer,
-    std::vector<float>& depth_buffer, const Camera& camera,
-    const std::vector<Vertex>& vertices, const MeshTriangle& triangle,
-    const Matrix& transformation, int width, int height) {
+void render(const SceneElement& element, const MeshTriangle& triangle,
+    const Scene& scene, const Camera& camera, const Matrix& transformation,
+    std::vector<std::uint32_t>& frame_buffer, std::vector<float>& depth_buffer,
+    int width, int height) {
+  auto& vertices = element.get_mesh().m_vertices;
   auto& a = vertices[triangle.m_a];
   auto& b = vertices[triangle.m_b];
   auto& c = vertices[triangle.m_c];
@@ -174,7 +175,7 @@ void render(std::vector<std::uint32_t>& frame_buffer,
   auto camera_b = transform(transformation * b.m_position, camera);
   auto camera_c = transform(transformation * c.m_position, camera);
   if(camera_a.m_z < 0 && camera_b.m_z < 0 && camera_c.m_z < 0) {
-    render(frame_buffer, depth_buffer, a, b, c, camera_a, camera_b, camera_c,
+    render(a, b, c, camera_a, camera_b, camera_c, frame_buffer, depth_buffer,
       width, height);
     return;
   }
@@ -185,57 +186,59 @@ void render(std::vector<std::uint32_t>& frame_buffer,
   if(clipped_count < 3) {
     return;
   }
-  render(frame_buffer, depth_buffer, clipped_vertices[0], clipped_vertices[1],
-    clipped_vertices[2], clipped_points[0], clipped_points[1],
-    clipped_points[2], width, height);
+  render(clipped_vertices[0], clipped_vertices[1], clipped_vertices[2],
+    clipped_points[0], clipped_points[1], clipped_points[2], frame_buffer,
+    depth_buffer, width, height);
   if(clipped_count == 4) {
-    render(frame_buffer, depth_buffer, clipped_vertices[0], clipped_vertices[2],
-      clipped_vertices[3], clipped_points[0], clipped_points[2],
-      clipped_points[3], width, height);
+    render(clipped_vertices[0], clipped_vertices[2], clipped_vertices[3],
+      clipped_points[0], clipped_points[2], clipped_points[3], frame_buffer,
+      depth_buffer, width, height);
   }
 }
 
-void render(std::vector<std::uint32_t>& frame_buffer,
-    std::vector<float>& depth_buffer, const Camera& camera,
-    const std::vector<Vertex>& vertices,
-    const std::vector<MeshTriangle>& triangles, const Matrix& transformation,
+void render(const SceneElement& element,
+    const std::vector<MeshTriangle>& triangles, const Scene& scene,
+    const Camera& camera, const Matrix& transformation,
+    std::vector<std::uint32_t>& frame_buffer, std::vector<float>& depth_buffer,
     int width, int height) {
   for(auto& triangle : triangles) {
-    render(frame_buffer, depth_buffer, camera, vertices, triangle,
-      transformation, width, height);
+    render(element, triangle, scene, camera, transformation, frame_buffer,
+      depth_buffer, width, height);
   }
 }
 
-void render(std::vector<std::uint32_t>& frame_buffer,
-    std::vector<float>& depth_buffer, const Camera& camera,
-    const std::vector<Vertex>& vertices, const MeshNode& node,
-    const Transformation& transformation, const Matrix& parent_transformation,
+void render(const SceneElement& element, const MeshNode& node,
+    const Scene& scene, const Camera& camera,
+    const Matrix& parent_transformation,
+    std::vector<std::uint32_t>& frame_buffer, std::vector<float>& depth_buffer,
     int width, int height) {
-  auto next_transformation =
-    parent_transformation * transformation.get_transformation(node);
+  auto next_transformation = parent_transformation *
+    element.get_transformation().get_transformation(node);
   if(node.get_type() == MeshNode::Type::CHUNK) {
     for(auto& child : node.as_chunk()) {
-      render(frame_buffer, depth_buffer, camera, vertices, child,
-        transformation, next_transformation, width, height);
+      render(element, child, scene, camera, next_transformation, frame_buffer,
+        depth_buffer, width, height);
     }
   } else {
-    render(frame_buffer, depth_buffer, camera, vertices, node.as_triangles(),
-      next_transformation, width, height);
+    render(element, node.as_triangles(), scene, camera, next_transformation,
+      frame_buffer, depth_buffer, width, height);
   }
 }
 
-void render(std::vector<std::uint32_t>& frame_buffer,
-    std::vector<float>& depth_buffer, const Camera& camera, const Mesh& mesh,
-    const Transformation& transformation, int width, int height) {
-  render(frame_buffer, depth_buffer, camera, mesh.m_vertices, mesh.m_root,
-    transformation, Matrix::IDENTITY(), width, height);
+void render(const SceneElement& element, const Scene& scene,
+    const Camera& camera, std::vector<std::uint32_t>& frame_buffer,
+    std::vector<float>& depth_buffer, int width, int height) {
+  render(element, element.get_mesh().m_root, scene, camera, Matrix::IDENTITY(),
+    frame_buffer, depth_buffer, width, height);
 }
 
-void render(std::vector<std::uint32_t>& frame_buffer,
-    std::vector<float>& depth_buffer, const Camera& camera,
-    const SceneElement& element, int width, int height) {
-  render(frame_buffer, depth_buffer, camera, element.get_mesh(),
-    element.get_transformation(), width, height);
+void render(const Scene& scene, const Camera& camera,
+    std::vector<std::uint32_t>& frame_buffer, std::vector<float>& depth_buffer,
+    int width, int height) {
+  for(auto i = 0; i != scene.get_scene_element_count(); ++i) {
+    render(scene.get_scene_element(i), scene, camera, frame_buffer,
+      depth_buffer, width, height);
+  }
 }
 
 Mesh make_cube(Color color) {
@@ -286,13 +289,6 @@ Mesh make_cube(Color color) {
   return Mesh(std::move(vertices), MeshNode(std::move(triangles)));
 }
 
-std::vector<std::unique_ptr<SceneElement>> make_cube_scene() {
-  auto elements = std::vector<std::unique_ptr<SceneElement>>();
-  elements.push_back(
-    std::make_unique<SceneElement>(make_cube(Color(0, 0, 255, 255))));
-  return elements;
-}
-
 std::vector<std::vector<int>> level_map = {
   {1,1,1,1,1,1,1,1},
   {1,0,0,0,0,0,0,1},
@@ -301,30 +297,31 @@ std::vector<std::vector<int>> level_map = {
   {1,1,1,1,1,1,1,1},
 };
 
-std::vector<std::unique_ptr<SceneElement>> make_scene(
-    const std::vector<std::vector<int>>& scene) {
-  auto elements = std::vector<std::unique_ptr<SceneElement>>();
-  auto depth = int(scene.size());
+std::unique_ptr<Scene> make_scene(const std::vector<std::vector<int>>& map) {
+  auto scene = std::make_unique<Scene>();
+  scene->set(AmbientLight(Color(40, 40, 55, 255), 0.2));
+  auto depth = int(map.size());
   for(auto y = 0; y < depth; ++y) {
-    for(auto x = 0; x < int(scene[y].size()); ++x) {
-      if(scene[y][x] == 1) {
+    for(auto x = 0; x < int(map[y].size()); ++x) {
+      if(map[y][x] == 1) {
         auto element =
           std::make_unique<SceneElement>(make_cube(Color(255, 255, 0, 255)));
         element->get_transformation().apply(
           translate(Vector(2 * x, 1, -2 * (depth - y))),
           element->get_mesh().m_root);
-        elements.push_back(std::move(element));
+        scene->add(std::move(element));
       }
     }
   }
   auto ceiling =
     std::make_unique<SceneElement>(make_cube(Color(178, 34, 34, 255)));
-  ceiling->get_transformation().apply(scale_y(.001), ceiling->get_mesh().m_root);
+  ceiling->get_transformation().apply(
+    scale_y(.001), ceiling->get_mesh().m_root);
   ceiling->get_transformation().apply(scale_x(8), ceiling->get_mesh().m_root);
   ceiling->get_transformation().apply(scale_z(5), ceiling->get_mesh().m_root);
   ceiling->get_transformation().apply(translate(Vector(7, 2, -6)),
     ceiling->get_mesh().m_root);
-  elements.push_back(std::move(ceiling));
+  scene->add(std::move(ceiling));
   auto floor =
     std::make_unique<SceneElement>(make_cube(Color(116, 116, 116, 255)));
   floor->get_transformation().apply(scale_y(.001), floor->get_mesh().m_root);
@@ -332,8 +329,8 @@ std::vector<std::unique_ptr<SceneElement>> make_scene(
   floor->get_transformation().apply(scale_z(5), floor->get_mesh().m_root);
   floor->get_transformation().apply(translate(Vector(7, -.002, -6)),
     floor->get_mesh().m_root);
-  elements.push_back(std::move(floor));
-  return elements;
+  scene->add(std::move(floor));
+  return scene;
 }
 
 auto make_shader(int width, int height) {
@@ -494,9 +491,7 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
     SDL_GetRelativeMouseState(&relX, &relY);
     float deltaAngle = relX * 0.0025f; 
     tilt(camera, deltaAngle, 0);
-    for(auto& element : scene) {
-      render(frame_buffer, depth_buffer, camera, *element, WIDTH, HEIGHT);
-    }
+    render(*scene, camera, frame_buffer, depth_buffer, WIDTH, HEIGHT);
     glBindTexture(GL_TEXTURE_2D, texture_id);
     glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, WIDTH, HEIGHT, GL_RGBA,
       GL_UNSIGNED_BYTE, frame_buffer.data());

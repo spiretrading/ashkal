@@ -11,6 +11,7 @@ namespace Ashkal {
   struct MeshNode;
   struct Point;
   struct Ray;
+  class Scene;
   struct Vector;
   struct Vertex;
 }
