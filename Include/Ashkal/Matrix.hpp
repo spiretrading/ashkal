@@ -307,6 +307,32 @@ namespace Ashkal {
     return transform;
   }
 
+  inline Matrix scale_x(float factor) {
+    auto scale = Matrix::IDENTITY();
+    scale.set(0, 0, factor);
+    return scale;
+  }
+
+  inline Matrix scale_y(float factor) {
+    auto scale = Matrix::IDENTITY();
+    scale.set(1, 1, factor);
+    return scale;
+  }
+
+  inline Matrix scale_z(float factor) {
+    auto scale = Matrix::IDENTITY();
+    scale.set(2, 2, factor);
+    return scale;
+  }
+
+  inline Matrix scale(float factor) {
+    auto scale = Matrix::IDENTITY();
+    scale.set(0, 0, factor);
+    scale.set(1, 1, factor);
+    scale.set(2, 2, factor);
+    return scale;
+  }
+
   inline std::ostream& operator <<(std::ostream& out, const Matrix& matrix) {
     out << "Matrix(";
     for(auto y = 0; y != Matrix::HEIGHT; ++y) {

@@ -90,10 +90,10 @@ void render(std::vector<std::uint32_t>& frame_buffer,
           auto color = lerp(a.m_color, b.m_color, w1 / sum);
           auto final_color = lerp(color, c.m_color, w2 / sum);
           auto pixel =
-            (std::uint32_t(final_color.m_red) << 24) |
-            (std::uint32_t(final_color.m_green) << 16) |
-            (std::uint32_t(final_color.m_blue) << 8) |
-            std::uint32_t(final_color.m_alpha);
+            (std::uint32_t(final_color.m_alpha) << 24) |
+            (std::uint32_t(final_color.m_blue) << 16) |
+            (std::uint32_t(final_color.m_green) << 8) |
+            std::uint32_t(final_color.m_red);
           frame_buffer[index] = pixel;
         }
       }
@@ -310,7 +310,7 @@ std::vector<std::unique_ptr<SceneElement>> make_scene(
     for(auto x = 0; x < int(scene[y].size()); ++x) {
       if(scene[y][x] == 1) {
         auto element =
-          std::make_unique<SceneElement>(make_cube(Color(0, 0, 255, 255)));
+          std::make_unique<SceneElement>(make_cube(Color(255, 255, 0, 255)));
         element->get_transformation().apply(
           translate(Vector(2 * x, 1, -2 * (depth - y))),
           element->get_mesh().m_root);
@@ -318,6 +318,22 @@ std::vector<std::unique_ptr<SceneElement>> make_scene(
       }
     }
   }
+  auto ceiling =
+    std::make_unique<SceneElement>(make_cube(Color(178, 34, 34, 255)));
+  ceiling->get_transformation().apply(scale_y(.001), ceiling->get_mesh().m_root);
+  ceiling->get_transformation().apply(scale_x(8), ceiling->get_mesh().m_root);
+  ceiling->get_transformation().apply(scale_z(5), ceiling->get_mesh().m_root);
+  ceiling->get_transformation().apply(translate(Vector(7, 2, -6)),
+    ceiling->get_mesh().m_root);
+  elements.push_back(std::move(ceiling));
+  auto floor =
+    std::make_unique<SceneElement>(make_cube(Color(116, 116, 116, 255)));
+  floor->get_transformation().apply(scale_y(.001), floor->get_mesh().m_root);
+  floor->get_transformation().apply(scale_x(8), floor->get_mesh().m_root);
+  floor->get_transformation().apply(scale_z(5), floor->get_mesh().m_root);
+  floor->get_transformation().apply(translate(Vector(7, -.002, -6)),
+    floor->get_mesh().m_root);
+  elements.push_back(std::move(floor));
   return elements;
 }
 
