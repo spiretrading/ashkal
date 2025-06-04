@@ -56,7 +56,7 @@ Color lerp(Color a, Color b, float t) {
     std::lerp(a.m_alpha, b.m_alpha, t));
 }
 
-void render(const Vertex& a, const Vertex& b, const Vertex& c,
+void render(const Color& a, const Color& b, const Color& c,
     const Point& camera_a, const Point& camera_b, const Point& camera_c,
     std::vector<std::uint32_t>& frame_buffer, std::vector<float>& depth_buffer,
     int width, int height) {
@@ -87,8 +87,8 @@ void render(const Vertex& a, const Vertex& b, const Vertex& c,
         auto index = y * width + x;
         if(z_interpolated < depth_buffer[index]) {
           depth_buffer[index] = z_interpolated;
-          auto color = lerp(a.m_color, b.m_color, w1 / sum);
-          auto final_color = lerp(color, c.m_color, w2 / sum);
+          auto color = lerp(a, b, w1 / sum);
+          auto final_color = lerp(color, c, w2 / sum);
           auto pixel =
             (std::uint32_t(final_color.m_alpha) << 24) |
             (std::uint32_t(final_color.m_blue) << 16) |
@@ -114,18 +114,10 @@ Point intersect_near_plane_point(const Point& a, const Point& b) {
     THRESHOLD - NEAR_EPS);
 }
 
-Color intersectNearPlaneColor(const Point& Apos, const Color& Acol,
-    const Point& Bpos, const Color& Bcol) {
-  return Acol;
-/*
-    float t = Apos.m_z / (Apos.m_z - Bpos.m_z);
-    Color cA = Acol * (1.0f - t);
-    Color cB = Bcol * (t);
-    return { uint8_t(std::round(cA.m_red   + cB.m_red)),
-             uint8_t(std::round(cA.m_green + cB.m_green)),
-             uint8_t(std::round(cA.m_blue  + cB.m_blue)),
-             uint8_t(std::round(cA.m_alpha + cB.m_alpha)) };
-*/
+Color intersect_near_plane_color(const Point& a, const Color& color_a,
+    const Point& b, const Color& color_b) {
+  auto t = a.m_z / (a.m_z - b.m_z);
+  return lerp(color_a, color_b, t);
 }
 
 int clip(const Vertex& a, const Vertex& b, const Vertex& c, Point camera_a,
@@ -145,12 +137,12 @@ int clip(const Vertex& a, const Vertex& b, const Vertex& c, Point camera_a,
     } else if(in0 && !in1) {
       clipped_points[n] = intersect_near_plane_point(p0, p1);
       clipped_vertices[n].m_color =
-        intersectNearPlaneColor(p0, color_0, p1, color_1);
+        intersect_near_plane_color(p0, color_0, p1, color_1);
       ++n;
     } else if(!in0 && in1) {
       clipped_points[n] = intersect_near_plane_point(p0, p1);
       clipped_vertices[n].m_color =
-        intersectNearPlaneColor(p0, color_0, p1, color_1);
+        intersect_near_plane_color(p0, color_0, p1, color_1);
       ++n;
       clipped_points[n] = p1;
       clipped_vertices[n].m_color = color_1;
@@ -175,8 +167,11 @@ void render(const Model& model, const MeshTriangle& triangle,
   auto camera_b = transform(transformation * b.m_position, camera);
   auto camera_c = transform(transformation * c.m_position, camera);
   if(camera_a.m_z < 0 && camera_b.m_z < 0 && camera_c.m_z < 0) {
-    render(a, b, c, camera_a, camera_b, camera_c, frame_buffer, depth_buffer,
-      width, height);
+    auto a_color = apply(scene.get_ambient_light(), a.m_color);
+    auto b_color = apply(scene.get_ambient_light(), b.m_color);
+    auto c_color = apply(scene.get_ambient_light(), c.m_color);
+    render(a_color, b_color, c_color, camera_a, camera_b, camera_c,
+      frame_buffer, depth_buffer, width, height);
     return;
   }
   auto clipped_points = std::array<Point, 4>();
@@ -186,13 +181,17 @@ void render(const Model& model, const MeshTriangle& triangle,
   if(clipped_count < 3) {
     return;
   }
-  render(clipped_vertices[0], clipped_vertices[1], clipped_vertices[2],
-    clipped_points[0], clipped_points[1], clipped_points[2], frame_buffer,
-    depth_buffer, width, height);
+  for(auto i = 0; i != clipped_count; ++i) {
+    clipped_vertices[i].m_color =
+      apply(scene.get_ambient_light(), clipped_vertices[i].m_color);
+  }
+  render(clipped_vertices[0].m_color, clipped_vertices[1].m_color,
+    clipped_vertices[2].m_color, clipped_points[0], clipped_points[1],
+    clipped_points[2], frame_buffer, depth_buffer, width, height);
   if(clipped_count == 4) {
-    render(clipped_vertices[0], clipped_vertices[2], clipped_vertices[3],
-      clipped_points[0], clipped_points[2], clipped_points[3], frame_buffer,
-      depth_buffer, width, height);
+    render(clipped_vertices[0].m_color, clipped_vertices[2].m_color,
+      clipped_vertices[3].m_color, clipped_points[0], clipped_points[2],
+      clipped_points[3], frame_buffer, depth_buffer, width, height);
   }
 }
 
@@ -297,7 +296,7 @@ std::vector<std::vector<int>> level_map = {
 
 std::unique_ptr<Scene> make_scene(const std::vector<std::vector<int>>& map) {
   auto scene = std::make_unique<Scene>();
-  scene->set(AmbientLight(Color(40, 40, 55, 255), 0.2));
+  scene->set(AmbientLight(Color(255, 255, 255, 255), 1));
   auto depth = int(map.size());
   for(auto y = 0; y < depth; ++y) {
     for(auto x = 0; x < int(map[y].size()); ++x) {

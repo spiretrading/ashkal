@@ -13,6 +13,13 @@ namespace Ashkal {
     float m_intensity;
   };
 
+  inline Color apply(const AmbientLight& light, Color color) {
+    auto r = (color.m_red * light.m_color.m_red * light.m_intensity) / 255;
+    auto g = (color.m_green * light.m_color.m_green * light.m_intensity) / 255;
+    auto b = (color.m_blue * light.m_color.m_blue * light.m_intensity) / 255;
+    return Color(r, g, b, color.m_alpha);
+  }
+
   inline std::string AMBIENT_LIGHT_CL_SOURCE =
     BOOST_COMPUTE_STRINGIZE_SOURCE(
       Color apply_shading(
