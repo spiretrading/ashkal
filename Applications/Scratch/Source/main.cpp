@@ -50,6 +50,26 @@ float compute_edge(const std::pair<int, int>& p1,
     (p2.second - p1.second) * (p.first - p1.first);
 }
 
+Color lerp(Color a, Color b, Color c, float w0, float w1, float w2) {
+  float sum = w0 + w1 + w2;
+  float inv = 1.0f / sum;
+  float alpha = w0 * inv;
+  float beta = w1 * inv;
+  float gamma = w2 * inv;
+  auto mix_channel = [&](std::uint8_t ca, std::uint8_t cb, std::uint8_t cc) {
+      float f = ca * alpha + cb * beta + cc * gamma;
+      if (f < 0.f) f = 0.f;
+      if (f > 255.f) f = 255.f;
+      return static_cast<uint8_t>(std::round(f));
+  };
+  return Color {
+      mix_channel(a.m_red,   b.m_red,   c.m_red),
+      mix_channel(a.m_green, b.m_green, c.m_green),
+      mix_channel(a.m_blue,  b.m_blue,  c.m_blue),
+      mix_channel(a.m_alpha, b.m_alpha, c.m_alpha)
+  };
+}
+
 Color lerp(Color a, Color b, float t) {
   return Color(std::lerp(a.m_red, b.m_red, t),
     std::lerp(a.m_green, b.m_green, t), std::lerp(a.m_blue, b.m_blue, t),
@@ -85,15 +105,14 @@ void render(const Color& a, const Color& b, const Color& c,
         auto z_interpolated =
           (w0 * depth_a + w1 * depth_b + w2 * depth_c) / sum;
         auto index = y * width + x;
-        if(z_interpolated < depth_buffer[index] - 0.0001) {
+        if(z_interpolated < depth_buffer[index]) {
           depth_buffer[index] = z_interpolated;
-          auto color = lerp(a, b, w1 / sum);
-          auto final_color = lerp(color, c, w2 / sum);
+          auto color = lerp(a, b, c, w0, w1, w2);
           auto pixel =
-            (std::uint32_t(final_color.m_alpha) << 24) |
-            (std::uint32_t(final_color.m_blue) << 16) |
-            (std::uint32_t(final_color.m_green) << 8) |
-            std::uint32_t(final_color.m_red);
+            (std::uint32_t(color.m_alpha) << 24) |
+            (std::uint32_t(color.m_blue) << 16) |
+            (std::uint32_t(color.m_green) << 8) |
+            std::uint32_t(color.m_red);
           frame_buffer[index] = pixel;
         }
       }
@@ -165,11 +184,14 @@ void render(const Model& model, const MeshTriangle& triangle,
   auto camera_b = transform(transformation * b.m_position, camera);
   auto camera_c = transform(transformation * c.m_position, camera);
   auto a_color = apply(scene.get_ambient_light(), a.m_color) +
-    apply(scene.get_directional_light(), a.m_normal, a.m_color);
+    apply(scene.get_directional_light(), normalize(transformation * a.m_normal),
+      a.m_color);
   auto b_color = apply(scene.get_ambient_light(), b.m_color) +
-    apply(scene.get_directional_light(), b.m_normal, b.m_color);
+    apply(scene.get_directional_light(), normalize(transformation * b.m_normal),
+      b.m_color);
   auto c_color = apply(scene.get_ambient_light(), c.m_color) +
-    apply(scene.get_directional_light(), c.m_normal, c.m_color);
+    apply(scene.get_directional_light(), normalize(transformation * c.m_normal),
+      c.m_color);
   if(camera_a.m_z < 0 && camera_b.m_z < 0 && camera_c.m_z < 0) {
     render(a_color, b_color, c_color, camera_a, camera_b, camera_c,
       frame_buffer, depth_buffer, width, height);
@@ -264,10 +286,10 @@ Mesh make_cube(Color color) {
   addVertex(1, -1, 1, 0, 0, 1, color);
   addVertex(1, 1, 1, 0, 0, 1, color);
   addVertex(-1, 1, 1, 0, 0, 1, color);
-  addVertex(1, -1, -1, 0, 0,-1, color);
-  addVertex(-1, -1, -1, 0, 0,-1, color);
-  addVertex(-1, 1, -1, 0, 0,-1, color);
-  addVertex(1, 1, -1, 0, 0,-1, color);
+  addVertex(1, -1, -1, 0, 0, -1, color);
+  addVertex(-1, -1, -1, 0, 0, -1, color);
+  addVertex(-1, 1, -1, 0, 0, -1, color);
+  addVertex(1, 1, -1, 0, 0, -1, color);
   triangles.push_back({0, 1, 2});
   triangles.push_back({0, 2, 3});
   triangles.push_back({4, 5, 6});
