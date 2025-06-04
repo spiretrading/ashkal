@@ -1,13 +1,13 @@
-#ifndef ASHKAL_SCENE_ELEMENT_HPP
-#define ASHKAL_SCENE_ELEMENT_HPP
+#ifndef ASHKAL_MODEL_HPP
+#define ASHKAL_MODEL_HPP
 #include "Ashkal/Ashkal.hpp"
 #include "Ashkal/Mesh.hpp"
 #include "Ashkal/Transformation.hpp"
 
 namespace Ashkal {
-  class SceneElement {
+  class Model {
     public:
-      SceneElement(Mesh mesh);
+      Model(Mesh mesh);
 
       const Mesh& get_mesh() const;
 
@@ -20,19 +20,19 @@ namespace Ashkal {
       Transformation m_transformation;
   };
 
-  inline SceneElement::SceneElement(Mesh mesh)
+  inline Model::Model(Mesh mesh)
     : m_mesh(std::move(mesh)),
       m_transformation(m_mesh) {}
 
-  inline const Mesh& SceneElement::get_mesh() const {
+  inline const Mesh& Model::get_mesh() const {
     return m_mesh;
   }
 
-  inline Transformation& SceneElement::get_transformation() {
+  inline Transformation& Model::get_transformation() {
     return m_transformation;
   }
 
-  inline const Transformation& SceneElement::get_transformation() const {
+  inline const Transformation& Model::get_transformation() const {
     return m_transformation;
   }
 }

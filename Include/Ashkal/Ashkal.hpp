@@ -9,6 +9,7 @@ namespace Ashkal {
   class Matrix;
   struct Mesh;
   struct MeshNode;
+  class Model;
   struct Point;
   struct Ray;
   class Scene;

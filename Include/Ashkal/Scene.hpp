@@ -2,29 +2,29 @@
 #define ASHKAL_SCENE_HPP
 #include "Ashkal/AmbientLight.hpp"
 #include "Ashkal/Ashkal.hpp"
-#include "Ashkal/SceneElement.hpp"
+#include "Ashkal/Model.hpp"
 
 namespace Ashkal {
   class Scene {
     public:
       Scene();
 
-      int get_scene_element_count() const;
+      int get_model_count() const;
 
-      SceneElement& get_scene_element(int index);
+      Model& get_model(int index);
 
-      const SceneElement& get_scene_element(int index) const;
+      const Model& get_model(int index) const;
 
-      void add(std::unique_ptr<SceneElement> element);
+      void add(std::unique_ptr<Model> model);
 
-      void remove_scene_element(int index);
+      void remove_model(int index);
 
       const AmbientLight& get_ambient_light() const;
 
       void set(const AmbientLight& light);
 
     private:
-      std::vector<std::unique_ptr<SceneElement>> m_elements;
+      std::vector<std::unique_ptr<Model>> m_models;
       AmbientLight m_ambient_light;
 
       Scene(const Scene&) = delete;
@@ -34,28 +34,28 @@ namespace Ashkal {
   inline Scene::Scene()
     : m_ambient_light(Color(0, 0, 0, 255)) {}
 
-  inline int Scene::get_scene_element_count() const {
-    return static_cast<int>(m_elements.size());
+  inline int Scene::get_model_count() const {
+    return static_cast<int>(m_models.size());
   }
 
-  inline SceneElement& Scene::get_scene_element(int index) {
-    return *m_elements[index];
+  inline Model& Scene::get_model(int index) {
+    return *m_models[index];
   }
 
-  inline const SceneElement& Scene::get_scene_element(int index) const {
-    return *m_elements[index];
+  inline const Model& Scene::get_model(int index) const {
+    return *m_models[index];
   }
 
-  inline void Scene::add(std::unique_ptr<SceneElement> element) {
-    m_elements.push_back(std::move(element));
+  inline void Scene::add(std::unique_ptr<Model> model) {
+    m_models.push_back(std::move(model));
   }
 
-  inline void Scene::remove_scene_element(int index) {
-    if(index == m_elements.size() - 1) {
-      m_elements.pop_back();
+  inline void Scene::remove_model(int index) {
+    if(index == m_models.size() - 1) {
+      m_models.pop_back();
     }
-    std::swap(m_elements[index], m_elements.back());
-    m_elements.pop_back();
+    std::swap(m_models[index], m_models.back());
+    m_models.pop_back();
   }
 
   inline const AmbientLight& Scene::get_ambient_light() const {
