@@ -27,6 +27,12 @@ namespace Ashkal {
     friend auto operator <=>(const Color&, const Color&) = default;
   };
 
+  inline Color operator +(Color left, Color right) {
+    return Color(std::min<int>(left.m_red + right.m_red, 255),
+      std::min<int>(left.m_green + right.m_green, 255),
+      std::min<int>(left.m_blue + right.m_blue, 255), left.m_alpha);
+  }
+
   inline std::ostream& operator <<(std::ostream& out, Color color) {
     return out << "Color(" << static_cast<int>(color.m_red) << ", " <<
       static_cast<int>(color.m_green) << ", " <<

@@ -13,11 +13,21 @@ namespace Ashkal {
     float m_intensity;
   };
 
-  inline Color apply(const AmbientLight& light, Color color) {
-    auto r = (color.m_red * light.m_color.m_red * light.m_intensity) / 255;
-    auto g = (color.m_green * light.m_color.m_green * light.m_intensity) / 255;
-    auto b = (color.m_blue * light.m_color.m_blue * light.m_intensity) / 255;
+  inline Color apply_shading(
+      Color color, Color light, float factor, float intensity) {
+    auto r = (color.m_red * light.m_red * factor * intensity) / 255;
+    auto g = (color.m_green * light.m_green * factor * intensity) / 255;
+    auto b = (color.m_blue * light.m_blue * factor * intensity) / 255;
     return Color(r, g, b, color.m_alpha);
+  }
+
+  inline float calculate_shading(
+      const Vector& normal, const Vector& direction) {
+    return std::max(dot(normal, direction), 0.f);
+  }
+
+  inline Color apply(const AmbientLight& light, Color color) {
+    return apply_shading(color, light.m_color, 1, light.m_intensity);
   }
 
   inline std::string AMBIENT_LIGHT_CL_SOURCE =

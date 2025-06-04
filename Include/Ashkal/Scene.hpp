@@ -2,6 +2,7 @@
 #define ASHKAL_SCENE_HPP
 #include "Ashkal/AmbientLight.hpp"
 #include "Ashkal/Ashkal.hpp"
+#include "Ashkal/DirectionalLight.hpp"
 #include "Ashkal/Model.hpp"
 
 namespace Ashkal {
@@ -23,9 +24,14 @@ namespace Ashkal {
 
       void set(const AmbientLight& light);
 
+      const DirectionalLight& get_directional_light() const;
+
+      void set(const DirectionalLight& light);
+
     private:
       std::vector<std::unique_ptr<Model>> m_models;
       AmbientLight m_ambient_light;
+      DirectionalLight m_directional_light;
 
       Scene(const Scene&) = delete;
       Scene& operator =(const Scene&) = delete;
@@ -64,6 +70,14 @@ namespace Ashkal {
 
   inline void Scene::set(const AmbientLight& light) {
     m_ambient_light = light;
+  }
+
+  inline const DirectionalLight& Scene::get_directional_light() const {
+    return m_directional_light;
+  }
+
+  inline void Scene::set(const DirectionalLight& light) {
+    m_directional_light = light;
   }
 }
 

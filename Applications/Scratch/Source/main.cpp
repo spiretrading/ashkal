@@ -120,35 +120,33 @@ Color intersect_near_plane_color(const Point& a, const Color& color_a,
   return lerp(color_a, color_b, t);
 }
 
-int clip(const Vertex& a, const Vertex& b, const Vertex& c, Point camera_a,
-    Point camera_b, Point camera_c, std::array<Vertex, 4>& clipped_vertices,
+int clip(Color a, Color b, Color c, Point camera_a, Point camera_b,
+    Point camera_c, std::array<Vertex, 4>& clipped_vertices,
     std::array<Point, 4>& clipped_points) {
   auto n = 0;
-  auto processEdge = [&] (
-      const Vertex& v0, const Vertex& v1, const Point& p0, const Point& p1) {
-    auto color_0 = v0.m_color;
-    auto color_1 = v1.m_color;
-    auto in0 = is_in_front(p0);
-    auto in1 = is_in_front(p1);
-    if(in0 && in1) {
-      clipped_points[n] = p1;
-      clipped_vertices[n].m_color = color_1;
-      ++n;
-    } else if(in0 && !in1) {
-      clipped_points[n] = intersect_near_plane_point(p0, p1);
-      clipped_vertices[n].m_color =
-        intersect_near_plane_color(p0, color_0, p1, color_1);
-      ++n;
-    } else if(!in0 && in1) {
-      clipped_points[n] = intersect_near_plane_point(p0, p1);
-      clipped_vertices[n].m_color =
-        intersect_near_plane_color(p0, color_0, p1, color_1);
-      ++n;
-      clipped_points[n] = p1;
-      clipped_vertices[n].m_color = color_1;
-      ++n;
-    }
-  };
+  auto processEdge =
+    [&] (Color c0, Color c1, const Point& p0, const Point& p1) {
+      auto in0 = is_in_front(p0);
+      auto in1 = is_in_front(p1);
+      if(in0 && in1) {
+        clipped_points[n] = p1;
+        clipped_vertices[n].m_color = c1;
+        ++n;
+      } else if(in0 && !in1) {
+        clipped_points[n] = intersect_near_plane_point(p0, p1);
+        clipped_vertices[n].m_color =
+          intersect_near_plane_color(p0, c0, p1, c1);
+        ++n;
+      } else if(!in0 && in1) {
+        clipped_points[n] = intersect_near_plane_point(p0, p1);
+        clipped_vertices[n].m_color =
+          intersect_near_plane_color(p0, c0, p1, c1);
+        ++n;
+        clipped_points[n] = p1;
+        clipped_vertices[n].m_color = c1;
+        ++n;
+      }
+    };
   processEdge(a, b, camera_a, camera_b);
   processEdge(b, c, camera_b, camera_c);
   processEdge(c, a, camera_c, camera_a);
@@ -166,24 +164,23 @@ void render(const Model& model, const MeshTriangle& triangle,
   auto camera_a = transform(transformation * a.m_position, camera);
   auto camera_b = transform(transformation * b.m_position, camera);
   auto camera_c = transform(transformation * c.m_position, camera);
+  auto a_color = apply(scene.get_ambient_light(), a.m_color) +
+    apply(scene.get_directional_light(), a.m_normal, a.m_color);
+  auto b_color = apply(scene.get_ambient_light(), b.m_color) +
+    apply(scene.get_directional_light(), b.m_normal, b.m_color);
+  auto c_color = apply(scene.get_ambient_light(), c.m_color) +
+    apply(scene.get_directional_light(), c.m_normal, c.m_color);
   if(camera_a.m_z < 0 && camera_b.m_z < 0 && camera_c.m_z < 0) {
-    auto a_color = apply(scene.get_ambient_light(), a.m_color);
-    auto b_color = apply(scene.get_ambient_light(), b.m_color);
-    auto c_color = apply(scene.get_ambient_light(), c.m_color);
     render(a_color, b_color, c_color, camera_a, camera_b, camera_c,
       frame_buffer, depth_buffer, width, height);
     return;
   }
   auto clipped_points = std::array<Point, 4>();
   auto clipped_vertices = std::array<Vertex, 4>();
-  auto clipped_count = clip(
-    a, b, c, camera_a, camera_b, camera_c, clipped_vertices, clipped_points);
+  auto clipped_count = clip(a_color, b_color, c_color, camera_a, camera_b,
+    camera_c, clipped_vertices, clipped_points);
   if(clipped_count < 3) {
     return;
-  }
-  for(auto i = 0; i != clipped_count; ++i) {
-    clipped_vertices[i].m_color =
-      apply(scene.get_ambient_light(), clipped_vertices[i].m_color);
   }
   render(clipped_vertices[0].m_color, clipped_vertices[1].m_color,
     clipped_vertices[2].m_color, clipped_points[0], clipped_points[1],
@@ -296,7 +293,9 @@ std::vector<std::vector<int>> level_map = {
 
 std::unique_ptr<Scene> make_scene(const std::vector<std::vector<int>>& map) {
   auto scene = std::make_unique<Scene>();
-  scene->set(AmbientLight(Color(255, 255, 255, 255), 1));
+  scene->set(AmbientLight(Color(255, 255, 255, 255), .7));
+  scene->set(DirectionalLight(
+    normalize(Vector(.2, -1, 0.3)), Color(255, 255, 240, 255), .8));
   auto depth = int(map.size());
   for(auto y = 0; y < depth; ++y) {
     for(auto x = 0; x < int(map[y].size()); ++x) {
@@ -445,7 +444,6 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
   auto cy = 2;
   auto camera = Camera(
     Point(2 * cx, 1, -2 * (depth - cy)), Vector(0, 0, -1), Vector(0, 1, 0));
-//  auto scene = make_cube_scene();
   auto scene = make_scene(level_map);
   auto is_running = true;
   auto event = SDL_Event();

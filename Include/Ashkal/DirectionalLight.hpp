@@ -14,6 +14,12 @@ namespace Ashkal {
     float m_intensity;
   };
 
+  inline Color apply(
+      const DirectionalLight& light, const Vector& normal, Color color) {
+    auto shading = calculate_shading(normal, -light.m_direction);
+    return apply_shading(color, light.m_color, shading, light.m_intensity);
+  }
+
   inline std::string DIRECTIONAL_LIGHT_CL_SOURCE =
     BOOST_COMPUTE_STRINGIZE_SOURCE(
       Color apply_directional_light(
