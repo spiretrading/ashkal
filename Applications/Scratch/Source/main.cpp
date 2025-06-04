@@ -101,22 +101,21 @@ void render(std::vector<std::uint32_t>& frame_buffer,
   }
 }
 
-bool isInFront(const Point& P) {
-    return P.m_z < .5f;
+const auto THRESHOLD = .5f;
+
+bool is_in_front(const Point& point) {
+  return point.m_z < THRESHOLD;
 }
 
-Point intersectNearPlanePoint(const Point& A, const Point& B) {
-    const auto NEAR_EPS = 1e-5f;
-    float t = (A.m_z - .5f) / (A.m_z - B.m_z);
-    Point I;
-    I.m_x = A.m_x + t * (B.m_x - A.m_x);
-    I.m_y = A.m_y + t * (B.m_y - A.m_y);
-    I.m_z = .5f - NEAR_EPS;
-    return I;
+Point intersect_near_plane_point(const Point& a, const Point& b) {
+  const auto NEAR_EPS = 1e-5f;
+  auto t = (a.m_z - THRESHOLD) / (a.m_z - b.m_z);
+  return Point(a.m_x + t * (b.m_x - a.m_x), a.m_y + t * (b.m_y - a.m_y),
+    THRESHOLD - NEAR_EPS);
 }
 
 Color intersectNearPlaneColor(const Point& Apos, const Color& Acol,
-  const Point& Bpos, const Color& Bcol) {
+    const Point& Bpos, const Color& Bcol) {
   return Acol;
 /*
     float t = Apos.m_z / (Apos.m_z - Bpos.m_z);
@@ -137,19 +136,19 @@ int clip(const Vertex& a, const Vertex& b, const Vertex& c, Point camera_a,
       const Vertex& v0, const Vertex& v1, const Point& p0, const Point& p1) {
     auto color_0 = v0.m_color;
     auto color_1 = v1.m_color;
-    auto in0 = isInFront(p0);
-    auto in1 = isInFront(p1);
+    auto in0 = is_in_front(p0);
+    auto in1 = is_in_front(p1);
     if(in0 && in1) {
       clipped_points[n] = p1;
       clipped_vertices[n].m_color = color_1;
       ++n;
     } else if(in0 && !in1) {
-      clipped_points[n] = intersectNearPlanePoint(p0, p1);
+      clipped_points[n] = intersect_near_plane_point(p0, p1);
       clipped_vertices[n].m_color =
         intersectNearPlaneColor(p0, color_0, p1, color_1);
       ++n;
     } else if(!in0 && in1) {
-      clipped_points[n] = intersectNearPlanePoint(p0, p1);
+      clipped_points[n] = intersect_near_plane_point(p0, p1);
       clipped_vertices[n].m_color =
         intersectNearPlaneColor(p0, color_0, p1, color_1);
       ++n;
