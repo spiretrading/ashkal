@@ -85,7 +85,7 @@ void render(const Color& a, const Color& b, const Color& c,
         auto z_interpolated =
           (w0 * depth_a + w1 * depth_b + w2 * depth_c) / sum;
         auto index = y * width + x;
-        if(z_interpolated < depth_buffer[index]) {
+        if(z_interpolated < depth_buffer[index] - 0.0001) {
           depth_buffer[index] = z_interpolated;
           auto color = lerp(a, b, w1 / sum);
           auto final_color = lerp(color, c, w2 / sum);
@@ -321,7 +321,7 @@ std::unique_ptr<Scene> make_scene(const std::vector<std::vector<int>>& map) {
   floor->get_transformation().apply(scale_y(.001), floor->get_mesh().m_root);
   floor->get_transformation().apply(scale_x(8), floor->get_mesh().m_root);
   floor->get_transformation().apply(scale_z(5), floor->get_mesh().m_root);
-  floor->get_transformation().apply(translate(Vector(7, -.002, -6)),
+  floor->get_transformation().apply(translate(Vector(7, -.1, -6)),
     floor->get_mesh().m_root);
   scene->add(std::move(floor));
   return scene;
