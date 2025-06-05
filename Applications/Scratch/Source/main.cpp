@@ -511,6 +511,11 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
     } else if(state[SDL_SCANCODE_D] || state[SDL_SCANCODE_RIGHT]) {
       move_right(camera, 1 / 10.f);
     }
+    if(state[SDL_SCANCODE_SPACE]) {
+      move_up(camera, 1 / 10.f);
+    } else if(state[SDL_SCANCODE_LCTRL]) {
+      move_down(camera, 1 / 10.f);
+    }
     int relX = 0, relY = 0;
     SDL_GetRelativeMouseState(&relX, &relY);
     float deltaAngle = relX * 0.0025f; 

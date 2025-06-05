@@ -76,6 +76,16 @@ namespace Ashkal {
     move_left(camera, -distance);
   }
 
+  /** Moves a camera up by a given distance. */
+  inline void move_up(Camera& camera, float distance) {
+    camera.apply(translate(distance * camera.get_orientation()));
+  }
+
+  /** Moves a camera down by a given distance. */
+  inline void move_down(Camera& camera, float distance) {
+    move_up(camera, -distance);
+  }
+
   /** Tilts a camera horizontally and vertically. */
   inline void tilt(Camera& camera, float tilt_x, float tilt_y) {
     camera.apply(translate(Vector(camera.get_position())) * yaw(tilt_x) *
