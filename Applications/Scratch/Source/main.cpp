@@ -34,14 +34,11 @@ std::pair<int, int> project_to_screen(
     camera.m_z = -NEAR_PLANE;
   }
   auto perspective = 1 / -camera.m_z;
-  auto aspect_ratio = float(width) / height;
-  auto normalized_x = (camera.m_x * perspective) / aspect_ratio;
+  auto normalized_x = (height * camera.m_x * perspective) / width;
   auto normalized_y = camera.m_y * perspective;
   auto fx = (normalized_x + 1) * 0.5f * width;
   auto fy = (1 - (normalized_y + 1) * 0.5f) * height;
-  auto screen_x = int(std::round(fx));
-  auto screen_y = int(std::round(fy));
-  return std::pair(screen_x, screen_y);
+  return std::pair(int(fx), int(fy));
 }
 
 float compute_edge(const std::pair<int, int>& p1,
