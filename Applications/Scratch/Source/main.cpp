@@ -14,6 +14,8 @@
 #include <boost/compute/interop/opengl/opengl_texture.hpp>
 #include "Ashkal/Camera.hpp"
 #include "Ashkal/Scene.hpp"
+#include "Ashkal/ShadingSample.hpp"
+#include "Ashkal/SolidColorSampler.hpp"
 #include "Version.hpp"
 
 using namespace Ashkal;
@@ -68,13 +70,18 @@ Color lerp(Color a, Color b, float t) {
     std::lerp(a.m_alpha, b.m_alpha, t));
 }
 
-void render(const Color& a, const Color& b, const Color& c,
-    const Point& camera_a, const Point& camera_b, const Point& camera_c,
-    std::vector<std::uint32_t>& frame_buffer, std::vector<float>& depth_buffer,
-    int width, int height) {
-  auto screen_a = project_to_screen(camera_a, width, height);
-  auto screen_b = project_to_screen(camera_b, width, height);
-  auto screen_c = project_to_screen(camera_c, width, height);
+struct ShadedVertex {
+  std::uint16_t m_vertex;
+  Point m_position;
+  ShadingTerm m_shading;
+};
+
+void render(const ShadedVertex& a, const ShadedVertex& b, const ShadedVertex& c,
+    const Material& material, std::vector<std::uint32_t>& frame_buffer,
+    std::vector<float>& depth_buffer, int width, int height) {
+  auto screen_a = project_to_screen(a.m_position, width, height);
+  auto screen_b = project_to_screen(b.m_position, width, height);
+  auto screen_c = project_to_screen(c.m_position, width, height);
   auto min_x =
     std::max(0, std::min({screen_a.first, screen_b.first, screen_c.first}));
   auto max_x = std::min(
@@ -83,9 +90,9 @@ void render(const Color& a, const Color& b, const Color& c,
     std::max(0, std::min({screen_a.second, screen_b.second, screen_c.second}));
   auto max_y = std::min(
     height - 1, std::max({screen_a.second, screen_b.second, screen_c.second}));
-  auto depth_a = -camera_a.m_z;
-  auto depth_b = -camera_b.m_z;
-  auto depth_c = -camera_c.m_z;
+  auto depth_a = -a.m_position.m_z;
+  auto depth_b = -b.m_position.m_z;
+  auto depth_c = -c.m_position.m_z;
   for(auto y = min_y; y <= max_y; ++y) {
     for(auto x = min_x; x <= max_x; ++x) {
       auto p = std::pair(x, y);
@@ -99,7 +106,8 @@ void render(const Color& a, const Color& b, const Color& c,
         auto index = y * width + x;
         if(z_interpolated < depth_buffer[index]) {
           depth_buffer[index] = z_interpolated;
-          auto color = lerp(a, b, c, w0, w1, w2);
+          auto color =
+            material.get_diffuseness().sample(TextureCoordinate(0, 0));
           auto pixel =
             (std::uint32_t(color.m_alpha) << 24) |
             (std::uint32_t(color.m_blue) << 16) |
@@ -118,49 +126,45 @@ bool is_in_front(const Point& point) {
   return point.m_z < THRESHOLD;
 }
 
-Point intersect_near_plane_point(const Point& a, const Point& b) {
+Point intersect_near_plane(const Point& a, const Point& b) {
   const auto NEAR_EPS = 1e-5f;
   auto t = (a.m_z - THRESHOLD) / (a.m_z - b.m_z);
   return Point(a.m_x + t * (b.m_x - a.m_x), a.m_y + t * (b.m_y - a.m_y),
     THRESHOLD - NEAR_EPS);
 }
 
-Color intersect_near_plane_color(const Point& a, const Color& color_a,
-    const Point& b, const Color& color_b) {
-  auto t = a.m_z / (a.m_z - b.m_z);
-  return lerp(color_a, color_b, t);
+void process_edge(const ShadedVertex& a, const ShadedVertex& b,
+    ShadedVertex& split_vertex,
+    std::array<const ShadedVertex*, 4>& clipped_vertices, int& n) {
+  auto in0 = is_in_front(a.m_position);
+  auto in1 = is_in_front(b.m_position);
+  if(in0 && in1) {
+    clipped_vertices[n] = &b;
+    ++n;
+  } else if(in0 && !in1) {
+    split_vertex.m_position =
+      intersect_near_plane(a.m_position, b.m_position);
+    split_vertex.m_shading = b.m_shading;
+    clipped_vertices[n] = &split_vertex;
+    ++n;
+  } else if(!in0 && in1) {
+    split_vertex.m_position =
+      intersect_near_plane(a.m_position, b.m_position);
+    split_vertex.m_shading = b.m_shading;
+    clipped_vertices[n] = &split_vertex;
+    ++n;
+    clipped_vertices[n] = &b;
+    ++n;
+  }
 }
 
-int clip(Color a, Color b, Color c, Point camera_a, Point camera_b,
-    Point camera_c, std::array<Vertex, 4>& clipped_vertices,
-    std::array<Point, 4>& clipped_points) {
+int clip(const ShadedVertex& a, const ShadedVertex& b, const ShadedVertex& c,
+    std::array<ShadedVertex, 3>& split_vertices,
+    std::array<const ShadedVertex*, 4>& clipped_vertices) {
   auto n = 0;
-  auto processEdge =
-    [&] (Color c0, Color c1, const Point& p0, const Point& p1) {
-      auto in0 = is_in_front(p0);
-      auto in1 = is_in_front(p1);
-      if(in0 && in1) {
-        clipped_points[n] = p1;
-        clipped_vertices[n].m_color = c1;
-        ++n;
-      } else if(in0 && !in1) {
-        clipped_points[n] = intersect_near_plane_point(p0, p1);
-        clipped_vertices[n].m_color =
-          intersect_near_plane_color(p0, c0, p1, c1);
-        ++n;
-      } else if(!in0 && in1) {
-        clipped_points[n] = intersect_near_plane_point(p0, p1);
-        clipped_vertices[n].m_color =
-          intersect_near_plane_color(p0, c0, p1, c1);
-        ++n;
-        clipped_points[n] = p1;
-        clipped_vertices[n].m_color = c1;
-        ++n;
-      }
-    };
-  processEdge(a, b, camera_a, camera_b);
-  processEdge(b, c, camera_b, camera_c);
-  processEdge(c, a, camera_c, camera_a);
+  process_edge(a, b, split_vertices[0], clipped_vertices, n);
+  process_edge(b, c, split_vertices[1], clipped_vertices, n);
+  process_edge(c, a, split_vertices[2], clipped_vertices, n);
   return n;
 }
 
@@ -178,55 +182,57 @@ Vector transform_normal(const Matrix& transformation, const Vector& normal) {
   return normalize(transformed_normal);
 }
 
-void render(const Model& model, const MeshTriangle& triangle,
-    const Scene& scene, const Camera& camera, const Matrix& transformation,
-    std::vector<std::uint32_t>& frame_buffer, std::vector<float>& depth_buffer,
-    int width, int height) {
+void render(const Model& model, const Fragment& fragment,
+    const VertexTriangle& triangle, const Scene& scene, const Camera& camera,
+    const Matrix& transformation, std::vector<std::uint32_t>& frame_buffer,
+    std::vector<float>& depth_buffer, int width, int height) {
   auto& vertices = model.get_mesh().m_vertices;
   auto& a = vertices[triangle.m_a];
+  auto shaded_a =
+    ShadedVertex(triangle.m_a, transform(transformation * a.m_position, camera),
+      calculate_shading(scene.get_ambient_light()) +
+        calculate_shading(scene.get_directional_light(),
+          transform_normal(transformation, a.m_normal)));
   auto& b = vertices[triangle.m_b];
+  auto shaded_b =
+    ShadedVertex(triangle.m_b, transform(transformation * b.m_position, camera),
+      calculate_shading(scene.get_ambient_light()) +
+        calculate_shading(scene.get_directional_light(),
+          transform_normal(transformation, b.m_normal)));
   auto& c = vertices[triangle.m_c];
-  auto camera_a = transform(transformation * a.m_position, camera);
-  auto camera_b = transform(transformation * b.m_position, camera);
-  auto camera_c = transform(transformation * c.m_position, camera);
-  auto a_color = apply(scene.get_ambient_light(), a.m_color) +
-    apply(scene.get_directional_light(),
-      transform_normal(transformation, a.m_normal), a.m_color);
-  auto b_color = apply(scene.get_ambient_light(), b.m_color) +
-    apply(scene.get_directional_light(),
-      transform_normal(transformation, b.m_normal), b.m_color);
-  auto c_color = apply(scene.get_ambient_light(), c.m_color) +
-    apply(scene.get_directional_light(),
-      transform_normal(transformation, c.m_normal), c.m_color);
-  if(camera_a.m_z < 0 && camera_b.m_z < 0 && camera_c.m_z < 0) {
-    render(a_color, b_color, c_color, camera_a, camera_b, camera_c,
-      frame_buffer, depth_buffer, width, height);
+  auto shaded_c =
+    ShadedVertex(triangle.m_c, transform(transformation * c.m_position, camera),
+      calculate_shading(scene.get_ambient_light()) +
+        calculate_shading(scene.get_directional_light(),
+          transform_normal(transformation, c.m_normal)));
+  if(is_in_front(shaded_a.m_position) && is_in_front(shaded_b.m_position) &&
+      is_in_front(shaded_c.m_position)) {
+    render(shaded_a, shaded_b, shaded_c, fragment.get_material(), frame_buffer,
+      depth_buffer, width, height);
     return;
   }
-  auto clipped_points = std::array<Point, 4>();
-  auto clipped_vertices = std::array<Vertex, 4>();
-  auto clipped_count = clip(a_color, b_color, c_color, camera_a, camera_b,
-    camera_c, clipped_vertices, clipped_points);
+  auto clipped_vertices = std::array<const ShadedVertex*, 4>();
+  auto split_vertices = std::array<ShadedVertex, 3>();
+  auto clipped_count =
+    clip(shaded_a, shaded_b, shaded_c, split_vertices, clipped_vertices);
   if(clipped_count < 3) {
     return;
   }
-  render(clipped_vertices[0].m_color, clipped_vertices[1].m_color,
-    clipped_vertices[2].m_color, clipped_points[0], clipped_points[1],
-    clipped_points[2], frame_buffer, depth_buffer, width, height);
+  render(*clipped_vertices[0], *clipped_vertices[1], *clipped_vertices[2],
+    fragment.get_material(), frame_buffer, depth_buffer, width, height);
   if(clipped_count == 4) {
-    render(clipped_vertices[0].m_color, clipped_vertices[2].m_color,
-      clipped_vertices[3].m_color, clipped_points[0], clipped_points[2],
-      clipped_points[3], frame_buffer, depth_buffer, width, height);
+    render(*clipped_vertices[0], *clipped_vertices[2], *clipped_vertices[3],
+      fragment.get_material(), frame_buffer, depth_buffer, width, height);
   }
 }
 
-void render(const Model& model, const std::vector<MeshTriangle>& triangles,
+void render(const Model& model, const Fragment& fragment,
     const Scene& scene, const Camera& camera, const Matrix& transformation,
     std::vector<std::uint32_t>& frame_buffer, std::vector<float>& depth_buffer,
     int width, int height) {
-  for(auto& triangle : triangles) {
-    render(model, triangle, scene, camera, transformation, frame_buffer,
-      depth_buffer, width, height);
+  for(auto& triangle : fragment.get_triangles()) {
+    render(model, fragment, triangle, scene, camera, transformation,
+      frame_buffer, depth_buffer, width, height);
   }
 }
 
@@ -242,7 +248,7 @@ void render(const Model& model, const MeshNode& node, const Scene& scene,
         depth_buffer, width, height);
     }
   } else {
-    render(model, node.as_triangles(), scene, camera, next_transformation,
+    render(model, node.as_fragment(), scene, camera, next_transformation,
       frame_buffer, depth_buffer, width, height);
   }
 }
@@ -266,36 +272,37 @@ void render(const Scene& scene, const Camera& camera,
 Mesh make_cube(Color color) {
   auto vertices = std::vector<Vertex>();
   vertices.reserve(24);
-  auto triangles = std::vector<MeshTriangle>();
+  auto triangles = std::vector<VertexTriangle>();
   triangles.reserve(12);
   auto addVertex = [&] (float x, float y, float z,
-      float nx, float ny, float nz, Color c) {
-    vertices.push_back(Vertex(Point(x, y, z), Vector(nx, ny, nz), c));
+      float nx, float ny, float nz) {
+    vertices.push_back(Vertex(Point(x, y, z), TextureCoordinate(0, 0),
+      Vector(nx, ny, nz)));
   };
-  addVertex(1, -1, -1, 1, 0, 0, color);
-  addVertex(1, 1, -1, 1, 0, 0, color);
-  addVertex(1, 1, 1, 1, 0, 0, color);
-  addVertex(1, -1, 1, 1, 0, 0, color);
-  addVertex(-1, -1, 1, -1, 0, 0, color);
-  addVertex(-1, 1, 1, -1, 0, 0, color);
-  addVertex(-1, 1, -1, -1, 0, 0, color);
-  addVertex(-1, -1, -1, -1, 0, 0, color);
-  addVertex(-1, 1, -1, 0, 1, 0, color);
-  addVertex(-1, 1, 1, 0, 1, 0, color);
-  addVertex(1, 1, 1, 0, 1, 0, color);
-  addVertex(1, 1, -1, 0, 1, 0, color);
-  addVertex(-1, -1, 1, 0,-1, 0, color);
-  addVertex(1, -1, 1, 0,-1, 0, color);
-  addVertex(1, -1, -1, 0,-1, 0, color);
-  addVertex(-1, -1, -1, 0,-1, 0, color);
-  addVertex(-1, -1, 1, 0, 0, 1, color);
-  addVertex(1, -1, 1, 0, 0, 1, color);
-  addVertex(1, 1, 1, 0, 0, 1, color);
-  addVertex(-1, 1, 1, 0, 0, 1, color);
-  addVertex(1, -1, -1, 0, 0, -1, color);
-  addVertex(-1, -1, -1, 0, 0, -1, color);
-  addVertex(-1, 1, -1, 0, 0, -1, color);
-  addVertex(1, 1, -1, 0, 0, -1, color);
+  addVertex(1, -1, -1, 1, 0, 0);
+  addVertex(1, 1, -1, 1, 0, 0);
+  addVertex(1, 1, 1, 1, 0, 0);
+  addVertex(1, -1, 1, 1, 0, 0);
+  addVertex(-1, -1, 1, -1, 0, 0);
+  addVertex(-1, 1, 1, -1, 0, 0);
+  addVertex(-1, 1, -1, -1, 0, 0);
+  addVertex(-1, -1, -1, -1, 0, 0);
+  addVertex(-1, 1, -1, 0, 1, 0);
+  addVertex(-1, 1, 1, 0, 1, 0);
+  addVertex(1, 1, 1, 0, 1, 0);
+  addVertex(1, 1, -1, 0, 1, 0);
+  addVertex(-1, -1, 1, 0,-1, 0);
+  addVertex(1, -1, 1, 0,-1, 0);
+  addVertex(1, -1, -1, 0,-1, 0);
+  addVertex(-1, -1, -1, 0,-1, 0);
+  addVertex(-1, -1, 1, 0, 0, 1);
+  addVertex(1, -1, 1, 0, 0, 1);
+  addVertex(1, 1, 1, 0, 0, 1);
+  addVertex(-1, 1, 1, 0, 0, 1);
+  addVertex(1, -1, -1, 0, 0, -1);
+  addVertex(-1, -1, -1, 0, 0, -1);
+  addVertex(-1, 1, -1, 0, 0, -1);
+  addVertex(1, 1, -1, 0, 0, -1);
   triangles.push_back({0, 1, 2});
   triangles.push_back({0, 2, 3});
   triangles.push_back({4, 5, 6});
@@ -308,7 +315,10 @@ Mesh make_cube(Color color) {
   triangles.push_back({16, 18, 19});
   triangles.push_back({20, 21, 22});
   triangles.push_back({20, 22, 23});
-  return Mesh(std::move(vertices), MeshNode(std::move(triangles)));
+  auto material = std::make_shared<Material>(
+    std::make_shared<SolidColorSampler>(color));
+  auto fragment = Fragment(std::move(triangles), std::move(material));
+  return Mesh(std::move(vertices), MeshNode(std::move(fragment)));
 }
 
 std::vector<std::vector<int>> level_map = {

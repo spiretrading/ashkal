@@ -4,8 +4,7 @@
 #include <boost/compute/types/struct.hpp>
 #include <boost/compute/utility/source.hpp>
 #include "Ashkal/Ashkal.hpp"
-#include "Ashkal/Color.hpp"
-#include "Ashkal/Vector.hpp"
+#include "Ashkal/ShadingTerm.hpp"
 
 namespace Ashkal {
   struct DirectionalLight {
@@ -14,10 +13,15 @@ namespace Ashkal {
     float m_intensity;
   };
 
-  inline Color apply(
-      const DirectionalLight& light, const Vector& normal, Color color) {
-    auto shading = calculate_shading(normal, -light.m_direction);
-    return apply_shading(color, light.m_color, shading, light.m_intensity);
+  inline float calculate_intensity(
+      const Vector& normal, const Vector& direction) {
+    return std::max(dot(normal, direction), 0.f);
+  }
+
+  inline ShadingTerm calculate_shading(
+      const DirectionalLight& light, const Vector& normal) {
+    auto intensity = calculate_intensity(normal, -light.m_direction);
+    return ShadingTerm(light.m_color, intensity);
   }
 
   inline std::string DIRECTIONAL_LIGHT_CL_SOURCE =

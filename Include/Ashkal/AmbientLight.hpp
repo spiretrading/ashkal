@@ -4,7 +4,8 @@
 #include <boost/compute/types/struct.hpp>
 #include <boost/compute/utility/source.hpp>
 #include "Ashkal/Ashkal.hpp"
-#include "Ashkal/Color.hpp"
+#include "Ashkal/ShadingTerm.hpp"
+
 
 namespace Ashkal {
   struct AmbientLight {
@@ -13,21 +14,8 @@ namespace Ashkal {
     float m_intensity;
   };
 
-  inline Color apply_shading(
-      Color color, Color light, float factor, float intensity) {
-    auto r = (color.m_red * light.m_red * factor * intensity) / 255;
-    auto g = (color.m_green * light.m_green * factor * intensity) / 255;
-    auto b = (color.m_blue * light.m_blue * factor * intensity) / 255;
-    return Color(r, g, b, color.m_alpha);
-  }
-
-  inline float calculate_shading(
-      const Vector& normal, const Vector& direction) {
-    return std::max(dot(normal, direction), 0.f);
-  }
-
-  inline Color apply(const AmbientLight& light, Color color) {
-    return apply_shading(color, light.m_color, 1, light.m_intensity);
+  inline ShadingTerm calculate_shading(const AmbientLight& light) {
+    return ShadingTerm(light.m_color, light.m_intensity);
   }
 
   inline std::string AMBIENT_LIGHT_CL_SOURCE =
