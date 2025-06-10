@@ -97,7 +97,21 @@ void render(const ShadedVertex& a, const ShadedVertex& b, const ShadedVertex& c,
           auto uv = TextureCoordinate(
             (alpha * uoz_a + beta * uoz_b + gamma * uoz_c) / inv_z,
             (alpha * voz_a + beta * voz_b + gamma * voz_c) / inv_z);
-          auto color = material.get_diffuseness().sample(uv);
+          auto texel = material.get_diffuseness().sample(uv);
+          auto light_color = Color(
+            static_cast<std::uint8_t>(alpha * a.m_shading.m_color.m_red +
+              beta * b.m_shading.m_color.m_red +
+              gamma * c.m_shading.m_color.m_red),
+            static_cast<std::uint8_t>(alpha * a.m_shading.m_color.m_green +
+              beta * b.m_shading.m_color.m_green +
+              gamma * c.m_shading.m_color.m_green),
+            static_cast<std::uint8_t>(alpha * a.m_shading.m_color.m_blue +
+              beta * b.m_shading.m_color.m_blue +
+              gamma * c.m_shading.m_color.m_blue), 255);
+          auto intensity = alpha * a.m_shading.m_intensity +
+            beta * b.m_shading.m_intensity + gamma * c.m_shading.m_intensity;
+          auto shading = ShadingTerm(light_color, intensity);
+          auto color = apply(shading, texel);
           auto pixel = (std::uint32_t(color.m_alpha) << 24) |
             (std::uint32_t(color.m_blue)  << 16) |
             (std::uint32_t(color.m_green) << 8) | std::uint32_t(color.m_red);
