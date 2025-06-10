@@ -14,6 +14,7 @@
 #include <boost/compute/interop/opengl/opengl_texture.hpp>
 #include "Ashkal/Camera.hpp"
 #include "Ashkal/Scene.hpp"
+#include "Ashkal/SdlSurfaceColorSampler.hpp"
 #include "Ashkal/ShadingSample.hpp"
 #include "Ashkal/SolidColorSampler.hpp"
 #include "Version.hpp"
@@ -44,35 +45,14 @@ std::pair<int, int> project_to_screen(
 }
 
 float compute_edge(const std::pair<int, int>& p1,
-    const std::pair<int, int>& p2, const std::pair<int, int>& p) {
+    const std::pair<int, int>& p2, const std::pair<float, float>& p) {
   return (p2.first - p1.first) * (p.second - p1.second) -
     (p2.second - p1.second) * (p.first - p1.first);
 }
 
-Color lerp(Color a, Color b, Color c, float w0, float w1, float w2) {
-  auto sum = w0 + w1 + w2;
-  auto inv = 1 / sum;
-  auto alpha = w0 * inv;
-  auto beta = w1 * inv;
-  auto gamma = w2 * inv;
-  auto mix_channel = [&] (std::uint8_t ca, std::uint8_t cb, std::uint8_t cc) {
-    return std::clamp(ca * alpha + cb * beta + cc * gamma, 0.f, 255.f);
-  };
-  return Color(mix_channel(a.m_red, b.m_red, c.m_red),
-    mix_channel(a.m_green, b.m_green, c.m_green),
-    mix_channel(a.m_blue, b.m_blue, c.m_blue),
-    mix_channel(a.m_alpha, b.m_alpha, c.m_alpha));
-}
-
-Color lerp(Color a, Color b, float t) {
-  return Color(std::lerp(a.m_red, b.m_red, t),
-    std::lerp(a.m_green, b.m_green, t), std::lerp(a.m_blue, b.m_blue, t),
-    std::lerp(a.m_alpha, b.m_alpha, t));
-}
-
 struct ShadedVertex {
-  std::uint16_t m_vertex;
   Point m_position;
+  TextureCoordinate m_uv;
   ShadingTerm m_shading;
 };
 
@@ -90,29 +70,37 @@ void render(const ShadedVertex& a, const ShadedVertex& b, const ShadedVertex& c,
     std::max(0, std::min({screen_a.second, screen_b.second, screen_c.second}));
   auto max_y = std::min(
     height - 1, std::max({screen_a.second, screen_b.second, screen_c.second}));
-  auto depth_a = -a.m_position.m_z;
-  auto depth_b = -b.m_position.m_z;
-  auto depth_c = -c.m_position.m_z;
+  auto inv_z_a = -1 / (a.m_position.m_z - 1);
+  auto inv_z_b = -1 / (b.m_position.m_z - 1);
+  auto inv_z_c = -1 / (c.m_position.m_z - 1);
+  auto uoz_a = a.m_uv.m_u * inv_z_a;
+  auto uoz_b = b.m_uv.m_u * inv_z_b;
+  auto uoz_c = c.m_uv.m_u * inv_z_c;
+  auto voz_a = a.m_uv.m_v * inv_z_a;
+  auto voz_b = b.m_uv.m_v * inv_z_b;
+  auto voz_c = c.m_uv.m_v * inv_z_c;
   for(auto y = min_y; y <= max_y; ++y) {
     for(auto x = min_x; x <= max_x; ++x) {
-      auto p = std::pair(x, y);
-      auto w0 = compute_edge(screen_b, screen_c, p);
-      auto w1 = compute_edge(screen_c, screen_a, p);
-      auto w2 = compute_edge(screen_a, screen_b, p);
+      auto point = std::pair(x + 0.5f, y + 0.5f);
+      auto w0 = compute_edge(screen_b, screen_c, point);
+      auto w1 = compute_edge(screen_c, screen_a, point);
+      auto w2 = compute_edge(screen_a, screen_b, point);
       if(w0 >= 0 && w1 >= 0 && w2 >= 0) {
-        auto sum = w0 + w1 + w2;
-        auto z_interpolated =
-          (w0 * depth_a + w1 * depth_b + w2 * depth_c) / sum;
+        auto alpha = w0 / (w0 + w1 + w2);
+        auto beta  = w1 / (w0 + w1 + w2);
+        auto gamma = w2 / (w0 + w1 + w2);
+        auto inv_z = alpha * inv_z_a + beta * inv_z_b + gamma * inv_z_c;
+        auto depth = 1 / inv_z;
         auto index = y * width + x;
-        if(z_interpolated < depth_buffer[index]) {
-          depth_buffer[index] = z_interpolated;
-          auto color =
-            material.get_diffuseness().sample(TextureCoordinate(0, 0));
-          auto pixel =
-            (std::uint32_t(color.m_alpha) << 24) |
-            (std::uint32_t(color.m_blue) << 16) |
-            (std::uint32_t(color.m_green) << 8) |
-            std::uint32_t(color.m_red);
+        if(depth < depth_buffer[index]) {
+          depth_buffer[index] = depth;
+          auto uv = TextureCoordinate(
+            (alpha * uoz_a + beta * uoz_b + gamma * uoz_c) / inv_z,
+            (alpha * voz_a + beta * voz_b + gamma * voz_c) / inv_z);
+          auto color = material.get_diffuseness().sample(uv);
+          auto pixel = (std::uint32_t(color.m_alpha) << 24) |
+            (std::uint32_t(color.m_blue)  << 16) |
+            (std::uint32_t(color.m_green) << 8) | std::uint32_t(color.m_red);
           frame_buffer[index] = pixel;
         }
       }
@@ -142,14 +130,20 @@ void process_edge(const ShadedVertex& a, const ShadedVertex& b,
     clipped_vertices[n] = &b;
     ++n;
   } else if(in0 && !in1) {
-    split_vertex.m_position =
-      intersect_near_plane(a.m_position, b.m_position);
+    auto p = intersect_near_plane(a.m_position, b.m_position);
+    auto t = (p.m_z - a.m_position.m_z) / (b.m_position.m_z - a.m_position.m_z);
+    split_vertex.m_position = p;
+    split_vertex.m_uv = TextureCoordinate(std::lerp(a.m_uv.m_u, b.m_uv.m_u, t),
+      std::lerp(a.m_uv.m_v, b.m_uv.m_v, t));
     split_vertex.m_shading = b.m_shading;
     clipped_vertices[n] = &split_vertex;
     ++n;
   } else if(!in0 && in1) {
-    split_vertex.m_position =
-      intersect_near_plane(a.m_position, b.m_position);
+    auto p = intersect_near_plane(a.m_position, b.m_position);
+    auto t = (p.m_z - a.m_position.m_z) / (b.m_position.m_z - a.m_position.m_z);
+    split_vertex.m_position = p;
+    split_vertex.m_uv = TextureCoordinate(std::lerp(a.m_uv.m_u, b.m_uv.m_u, t),
+      std::lerp(a.m_uv.m_v, b.m_uv.m_v, t));
     split_vertex.m_shading = b.m_shading;
     clipped_vertices[n] = &split_vertex;
     ++n;
@@ -189,19 +183,19 @@ void render(const Model& model, const Fragment& fragment,
   auto& vertices = model.get_mesh().m_vertices;
   auto& a = vertices[triangle.m_a];
   auto shaded_a =
-    ShadedVertex(triangle.m_a, transform(transformation * a.m_position, camera),
+    ShadedVertex(transform(transformation * a.m_position, camera), a.m_uv,
       calculate_shading(scene.get_ambient_light()) +
         calculate_shading(scene.get_directional_light(),
           transform_normal(transformation, a.m_normal)));
   auto& b = vertices[triangle.m_b];
   auto shaded_b =
-    ShadedVertex(triangle.m_b, transform(transformation * b.m_position, camera),
+    ShadedVertex(transform(transformation * b.m_position, camera), b.m_uv,
       calculate_shading(scene.get_ambient_light()) +
         calculate_shading(scene.get_directional_light(),
           transform_normal(transformation, b.m_normal)));
   auto& c = vertices[triangle.m_c];
   auto shaded_c =
-    ShadedVertex(triangle.m_c, transform(transformation * c.m_position, camera),
+    ShadedVertex(transform(transformation * c.m_position, camera), c.m_uv,
       calculate_shading(scene.get_ambient_light()) +
         calculate_shading(scene.get_directional_light(),
           transform_normal(transformation, c.m_normal)));
@@ -269,40 +263,59 @@ void render(const Scene& scene, const Camera& camera,
   }
 }
 
-Mesh make_cube(Color color) {
+Mesh make_cube(std::shared_ptr<ColorSampler> texture) {
   auto vertices = std::vector<Vertex>();
   vertices.reserve(24);
   auto triangles = std::vector<VertexTriangle>();
   triangles.reserve(12);
-  auto addVertex = [&] (float x, float y, float z,
-      float nx, float ny, float nz) {
-    vertices.push_back(Vertex(Point(x, y, z), TextureCoordinate(0, 0),
-      Vector(nx, ny, nz)));
-  };
-  addVertex(1, -1, -1, 1, 0, 0);
-  addVertex(1, 1, -1, 1, 0, 0);
-  addVertex(1, 1, 1, 1, 0, 0);
-  addVertex(1, -1, 1, 1, 0, 0);
-  addVertex(-1, -1, 1, -1, 0, 0);
-  addVertex(-1, 1, 1, -1, 0, 0);
-  addVertex(-1, 1, -1, -1, 0, 0);
-  addVertex(-1, -1, -1, -1, 0, 0);
-  addVertex(-1, 1, -1, 0, 1, 0);
-  addVertex(-1, 1, 1, 0, 1, 0);
-  addVertex(1, 1, 1, 0, 1, 0);
-  addVertex(1, 1, -1, 0, 1, 0);
-  addVertex(-1, -1, 1, 0,-1, 0);
-  addVertex(1, -1, 1, 0,-1, 0);
-  addVertex(1, -1, -1, 0,-1, 0);
-  addVertex(-1, -1, -1, 0,-1, 0);
-  addVertex(-1, -1, 1, 0, 0, 1);
-  addVertex(1, -1, 1, 0, 0, 1);
-  addVertex(1, 1, 1, 0, 0, 1);
-  addVertex(-1, 1, 1, 0, 0, 1);
-  addVertex(1, -1, -1, 0, 0, -1);
-  addVertex(-1, -1, -1, 0, 0, -1);
-  addVertex(-1, 1, -1, 0, 0, -1);
-  addVertex(1, 1, -1, 0, 0, -1);
+  vertices.emplace_back(
+    Point(1, -1, -1), TextureCoordinate(1, 0), Vector(1, 0, 0));
+  vertices.emplace_back(
+    Point(1, 1, -1), TextureCoordinate(1, 1), Vector(1, 0, 0));
+  vertices.emplace_back(
+    Point(1, 1, 1), TextureCoordinate(0, 1), Vector(1, 0, 0));
+  vertices.emplace_back(
+    Point(1, -1, 1), TextureCoordinate(0, 0), Vector(1, 0, 0));
+  vertices.emplace_back(
+    Point(-1, -1, 1), TextureCoordinate(1, 0), Vector(-1, 0, 0));
+  vertices.emplace_back(
+    Point(-1, 1, 1), TextureCoordinate(1, 1), Vector(-1, 0, 0));
+  vertices.emplace_back(
+    Point(-1, 1, -1), TextureCoordinate(0, 1), Vector(-1, 0, 0));
+  vertices.emplace_back(
+    Point(-1, -1, -1), TextureCoordinate(0, 0), Vector(-1, 0, 0));
+  vertices.emplace_back(
+    Point(-1, 1, -1), TextureCoordinate(0, 1), Vector(0, 1, 0));
+  vertices.emplace_back(
+    Point(-1, 1, 1), TextureCoordinate(0, 0), Vector(0, 1, 0));
+  vertices.emplace_back(
+    Point(1, 1, 1), TextureCoordinate(1, 0), Vector(0, 1, 0));
+  vertices.emplace_back(
+    Point(1, 1, -1), TextureCoordinate(1, 1), Vector(0, 1, 0));
+  vertices.emplace_back(
+    Point(-1, -1, 1), TextureCoordinate(0, 0), Vector(0, -1, 0));
+  vertices.emplace_back(
+    Point(1, -1, 1), TextureCoordinate(1, 0), Vector(0, -1, 0));
+  vertices.emplace_back(
+    Point(1, -1, -1), TextureCoordinate(1, 1), Vector(0, -1, 0));
+  vertices.emplace_back(
+    Point(-1, -1, -1), TextureCoordinate(0, 1), Vector(0, -1, 0));
+  vertices.emplace_back(
+    Point(-1, -1, 1), TextureCoordinate(0, 0), Vector(0, 0, 1));
+  vertices.emplace_back(
+    Point(1, -1, 1), TextureCoordinate(1, 0), Vector(0, 0, 1));
+  vertices.emplace_back(
+    Point(1, 1, 1), TextureCoordinate(1, 1), Vector(0, 0, 1));
+  vertices.emplace_back(
+    Point(-1, 1, 1), TextureCoordinate(0, 1), Vector(0, 0, 1));
+  vertices.emplace_back(
+    Point(1, -1, -1), TextureCoordinate(0, 0), Vector(0, 0, -1));
+  vertices.emplace_back(
+    Point(-1, -1, -1), TextureCoordinate(1, 0), Vector(0, 0, -1));
+  vertices.emplace_back(
+    Point(-1, 1, -1), TextureCoordinate(1, 1), Vector(0, 0, -1));
+  vertices.emplace_back(
+    Point(1, 1, -1), TextureCoordinate(0, 1), Vector(0, 0, -1));
   triangles.push_back({0, 1, 2});
   triangles.push_back({0, 2, 3});
   triangles.push_back({4, 5, 6});
@@ -315,8 +328,7 @@ Mesh make_cube(Color color) {
   triangles.push_back({16, 18, 19});
   triangles.push_back({20, 21, 22});
   triangles.push_back({20, 22, 23});
-  auto material = std::make_shared<Material>(
-    std::make_shared<SolidColorSampler>(color));
+  auto material = std::make_shared<Material>(std::move(texture));
   auto fragment = Fragment(std::move(triangles), std::move(material));
   return Mesh(std::move(vertices), MeshNode(std::move(fragment)));
 }
@@ -335,11 +347,11 @@ std::unique_ptr<Scene> make_scene(const std::vector<std::vector<int>>& map) {
   scene->set(DirectionalLight(
     normalize(Vector(.2, -1, 0.3)), Color(255, 255, 240, 255), .8));
   auto depth = int(map.size());
+  auto wall_texture = load_bitmap_sampler("texture1.bmp");
   for(auto y = 0; y < depth; ++y) {
     for(auto x = 0; x < int(map[y].size()); ++x) {
       if(map[y][x] == 1) {
-        auto model =
-          std::make_unique<Model>(make_cube(Color(255, 255, 0, 255)));
+        auto model = std::make_unique<Model>(make_cube(wall_texture));
         model->get_transformation().apply(
           translate(Vector(2 * x, 1, -2 * (depth - y))),
           model->get_mesh().m_root);
@@ -347,7 +359,9 @@ std::unique_ptr<Scene> make_scene(const std::vector<std::vector<int>>& map) {
       }
     }
   }
-  auto ceiling = std::make_unique<Model>(make_cube(Color(178, 34, 34, 255)));
+  auto ceiling_texture =
+    std::make_shared<SolidColorSampler>(Color(178, 34, 34, 255));
+  auto ceiling = std::make_unique<Model>(make_cube(ceiling_texture));
   ceiling->get_transformation().apply(
     scale_y(.001), ceiling->get_mesh().m_root);
   ceiling->get_transformation().apply(scale_x(8), ceiling->get_mesh().m_root);
@@ -355,7 +369,9 @@ std::unique_ptr<Scene> make_scene(const std::vector<std::vector<int>>& map) {
   ceiling->get_transformation().apply(translate(Vector(7, 2, -6)),
     ceiling->get_mesh().m_root);
   scene->add(std::move(ceiling));
-  auto floor = std::make_unique<Model>(make_cube(Color(116, 116, 116, 255)));
+  auto floor_texture =
+    std::make_shared<SolidColorSampler>(Color(116, 116, 116, 255));
+  auto floor = std::make_unique<Model>(make_cube(floor_texture));
   floor->get_transformation().apply(scale_y(.001), floor->get_mesh().m_root);
   floor->get_transformation().apply(scale_x(8), floor->get_mesh().m_root);
   floor->get_transformation().apply(scale_z(5), floor->get_mesh().m_root);
