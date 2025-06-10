@@ -114,9 +114,12 @@ bool is_in_front(const Point& point) {
   return point.m_z < THRESHOLD;
 }
 
-Point intersect_near_plane(const Point& a, const Point& b) {
+float compute_interpolation_parameter(const Point& a, const Point& b) {
+  return (a.m_z - THRESHOLD) / (a.m_z - b.m_z);
+}
+
+Point intersect_near_plane(const Point& a, const Point& b, float t) {
   const auto NEAR_EPS = 1e-5f;
-  auto t = (a.m_z - THRESHOLD) / (a.m_z - b.m_z);
   return Point(a.m_x + t * (b.m_x - a.m_x), a.m_y + t * (b.m_y - a.m_y),
     THRESHOLD - NEAR_EPS);
 }
@@ -130,8 +133,8 @@ void process_edge(const ShadedVertex& a, const ShadedVertex& b,
     clipped_vertices[n] = &b;
     ++n;
   } else if(in0 && !in1) {
-    auto p = intersect_near_plane(a.m_position, b.m_position);
-    auto t = (p.m_z - a.m_position.m_z) / (b.m_position.m_z - a.m_position.m_z);
+    auto t = compute_interpolation_parameter(a.m_position, b.m_position);
+    auto p = intersect_near_plane(a.m_position, b.m_position, t);
     split_vertex.m_position = p;
     split_vertex.m_uv = TextureCoordinate(std::lerp(a.m_uv.m_u, b.m_uv.m_u, t),
       std::lerp(a.m_uv.m_v, b.m_uv.m_v, t));
@@ -139,8 +142,8 @@ void process_edge(const ShadedVertex& a, const ShadedVertex& b,
     clipped_vertices[n] = &split_vertex;
     ++n;
   } else if(!in0 && in1) {
-    auto p = intersect_near_plane(a.m_position, b.m_position);
-    auto t = (p.m_z - a.m_position.m_z) / (b.m_position.m_z - a.m_position.m_z);
+    auto t = compute_interpolation_parameter(a.m_position, b.m_position);
+    auto p = intersect_near_plane(a.m_position, b.m_position, t);
     split_vertex.m_position = p;
     split_vertex.m_uv = TextureCoordinate(std::lerp(a.m_uv.m_u, b.m_uv.m_u, t),
       std::lerp(a.m_uv.m_v, b.m_uv.m_v, t));
@@ -333,7 +336,7 @@ Mesh make_cube(std::shared_ptr<ColorSampler> texture) {
   return Mesh(std::move(vertices), MeshNode(std::move(fragment)));
 }
 
-std::vector<std::vector<int>> level_map = {
+auto level_map = std::vector<std::vector<int>> {
   {1,1,1,1,1,1,1,1},
   {1,0,0,0,0,0,0,1},
   {1,0,1,0,1,1,0,1},
