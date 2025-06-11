@@ -50,6 +50,7 @@ namespace Ashkal {
       : m_transformation(Matrix::IDENTITY()) {
     mesh_to_node.insert(std::pair(&node, this));
     if(node.get_type() == MeshNode::Type::CHUNK) {
+      m_children.reserve(node.as_chunk().size());
       for(auto& child : node.as_chunk()) {
         m_children.emplace_back(child, mesh_to_node);
       }
