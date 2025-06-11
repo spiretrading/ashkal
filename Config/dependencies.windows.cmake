@@ -27,6 +27,12 @@ set(SDL_MAIN_LIBRARY_OPTIMIZED_PATH
   "${PROJECT_BINARY_DIR}/Dependencies/SDL2-2.0.16/lib/SDL2main.lib")
 set(SDL_LIBRARY_OPTIMIZED_PATH
   "${PROJECT_BINARY_DIR}/Dependencies/SDL2-2.0.16/lib/SDL2-static.lib")
+set(SDL_IMAGE_INCLUDE_PATH
+  "${PROJECT_BINARY_DIR}/Dependencies/SDL2_image-2.8.8/include/SDL2")
+set(SDL_IMAGE_LIBRARY_DEBUG_PATH
+  "${PROJECT_BINARY_DIR}/Dependencies/SDL2_image-2.8.8/lib/SDL2_image-staticd.lib")
+set(SDL_IMAGE_LIBRARY_OPTIMIZED_PATH
+  "${PROJECT_BINARY_DIR}/Dependencies/SDL2_image-2.8.8/lib/SDL2_image-static.lib")
 set(SDL_TTF_INCLUDE_PATH
   "${PROJECT_BINARY_DIR}/Dependencies/SDL2_ttf-2.0.15/build/include/SDL2")
 set(SDL_TTF_LIBRARY_DEBUG_PATH

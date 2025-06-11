@@ -5,9 +5,11 @@
 #include <assimp/Importer.hpp>
 #include <assimp/postprocess.h>
 #include <assimp/scene.h>
+#include <SDL_image.h>
 #include "Ashkal/Ashkal.hpp"
 #include "Ashkal/Material.hpp"
 #include "Ashkal/Mesh.hpp"
+#include "Ashkal/SdlSurfaceColorSampler.hpp"
 #include "Ashkal/SolidColorSampler.hpp"
 #include "Ashkal/VertexTriangle.hpp"
 
@@ -23,6 +25,7 @@ namespace Ashkal {
     }
     auto vertices = std::vector<Vertex>();
     auto children = std::vector<MeshNode>();
+    auto base_directory = path.parent_path();
     for(auto i = std::size_t(0); i < scene->mNumMeshes; ++i) {
       auto mesh = scene->mMeshes[i];
       auto vertex_indices = std::vector<std::uint16_t>();
@@ -56,15 +59,38 @@ namespace Ashkal {
         triangles.push_back({vertex_indices[face.mIndices[0]],
           vertex_indices[face.mIndices[1]], vertex_indices[face.mIndices[2]]});
       }
-      auto diffuse_color = aiColor3D(1, 1, 1);
-      if(scene->mMaterials && mesh->mMaterialIndex < scene->mNumMaterials) {
-        scene->mMaterials[mesh->mMaterialIndex]->Get(
-          AI_MATKEY_COLOR_DIFFUSE, diffuse_color);
-      }
-      auto color = Color(static_cast<std::uint8_t>(diffuse_color.r * 255),
-        static_cast<std::uint8_t>(diffuse_color.g * 255),
-        static_cast<std::uint8_t>(diffuse_color.b * 255), 255);
-      auto sampler  = std::make_shared<SolidColorSampler>(color);
+      auto sampler = [&] () -> std::shared_ptr<ColorSampler> {
+        auto material = [&] () -> aiMaterial* {
+          if(mesh->mMaterialIndex < scene->mNumMaterials) {
+            return scene->mMaterials[mesh->mMaterialIndex];
+          }
+          return nullptr;
+        }();
+        if(material) {
+          auto texture_path = aiString();
+          if(material->GetTexture(aiTextureType_DIFFUSE, 0, &texture_path) ==
+              AI_SUCCESS) {
+            auto full_texture_path = base_directory / texture_path.C_Str();
+            if(auto surface = IMG_Load(full_texture_path.string().c_str())) {
+              return std::make_shared<SdlSurfaceColorSampler>(*surface);
+            }
+            auto diffuse_color = aiColor3D(1, 1, 1);
+            material->Get(AI_MATKEY_COLOR_DIFFUSE, diffuse_color);
+            auto color = Color(
+              static_cast<std::uint8_t>(diffuse_color.r * 255),
+              static_cast<std::uint8_t>(diffuse_color.g * 255),
+              static_cast<std::uint8_t>(diffuse_color.b * 255), 255);
+            return std::make_shared<SolidColorSampler>(color);
+          }
+          auto diffuse_color = aiColor3D(1, 1, 1);
+          material->Get(AI_MATKEY_COLOR_DIFFUSE, diffuse_color);
+          auto color = Color(static_cast<std::uint8_t>(diffuse_color.r * 255),
+            static_cast<std::uint8_t>(diffuse_color.g * 255),
+            static_cast<std::uint8_t>(diffuse_color.b * 255), 255);
+          return std::make_shared<SolidColorSampler>(color);
+        }
+        return std::make_shared<SolidColorSampler>(Color(255, 255, 255, 255));
+      }();
       auto material = std::make_shared<Material>(sampler);
       auto fragment = Fragment(std::move(triangles), material);
       children.emplace_back(std::move(fragment));

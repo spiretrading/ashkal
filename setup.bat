@@ -94,6 +94,18 @@ IF %BUILD_NEEDED%==1 (
   POPD
   POPD
 )
+CALL :DownloadAndExtract "SDL2_image-2.8.8" ^
+  "https://github.com/libsdl-org/SDL_image/releases/download/release-2.8.8/SDL2_image-2.8.8.zip"
+IF %BUILD_NEEDED%==1 (
+  PUSHD SDL2_image-2.8.8
+  MKDIR build
+  PUSHD build
+  cmake -DCMAKE_INSTALL_PREFIX=!ROOT!\SDL2_image-2.8.8 -DBUILD_SHARED_LIBS=OFF -DSDL2_DIR=!ROOT!\SDL2-2.0.16\cmake -DSDL2IMAGE_VENDORED=OFF ..
+  cmake --build . --target INSTALL --config Debug
+  cmake --build . --target INSTALL --config Release
+  POPD
+  POPD
+)
 CALL :DownloadAndExtract "zlib-1.3.1" ^
   "https://github.com/madler/zlib/archive/refs/tags/v1.3.1.zip"
 IF %BUILD_NEEDED%==1 (

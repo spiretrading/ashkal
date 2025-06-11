@@ -34,6 +34,7 @@ include_directories(SYSTEM ${FREETYPE_INCLUDE_PATH})
 include_directories(SYSTEM ${GLEW_INCLUDE_PATH})
 include_directories(SYSTEM ${OPENCL_INCLUDE_PATH})
 include_directories(SYSTEM ${SDL_INCLUDE_PATH})
+include_directories(SYSTEM ${SDL_IMAGE_INCLUDE_PATH})
 include_directories(SYSTEM ${SDL_TTF_INCLUDE_PATH})
 include_directories(SYSTEM ${ZLIB_INCLUDE_PATH})
 link_directories(${BOOST_DEBUG_PATH})
@@ -73,6 +74,8 @@ target_link_libraries(Scratch
   optimized ${OPENCL_LIBRARY_OPTIMIZED_PATH}
   debug ${SDL_LIBRARY_DEBUG_PATH}
   optimized ${SDL_LIBRARY_OPTIMIZED_PATH}
+  debug ${SDL_IMAGE_LIBRARY_DEBUG_PATH}
+  optimized ${SDL_IMAGE_LIBRARY_OPTIMIZED_PATH}
   debug ${SDL_TTF_LIBRARY_DEBUG_PATH}
   optimized ${SDL_TTF_LIBRARY_OPTIMIZED_PATH}
   debug ${ZLIB_LIBRARY_DEBUG_PATH}
