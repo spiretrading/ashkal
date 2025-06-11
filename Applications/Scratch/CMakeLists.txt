@@ -28,12 +28,14 @@ if(NOT configure_result EQUAL 0)
 endif()
 include(../../Config/dependencies.cmake)
 include_directories(${ASHKAL_INCLUDE_PATH})
+include_directories(SYSTEM ${ASSIMP_INCLUDE_PATH})
 include_directories(SYSTEM ${BOOST_INCLUDE_PATH})
 include_directories(SYSTEM ${FREETYPE_INCLUDE_PATH})
 include_directories(SYSTEM ${GLEW_INCLUDE_PATH})
 include_directories(SYSTEM ${OPENCL_INCLUDE_PATH})
 include_directories(SYSTEM ${SDL_INCLUDE_PATH})
 include_directories(SYSTEM ${SDL_TTF_INCLUDE_PATH})
+include_directories(SYSTEM ${ZLIB_INCLUDE_PATH})
 link_directories(${BOOST_DEBUG_PATH})
 link_directories(${BOOST_OPTIMIZED_PATH})
 add_compile_definitions(CL_TARGET_OPENCL_VERSION=300
@@ -61,6 +63,8 @@ endif()
 add_executable(Scratch ${app_type} ${header_files} ${source_files})
 set_source_files_properties(${header_files} PROPERTIES HEADER_FILE_ONLY TRUE)
 target_link_libraries(Scratch
+  debug ${ASSIMP_LIBRARY_DEBUG_PATH}
+  optimized ${ASSIMP_LIBRARY_OPTIMIZED_PATH}
   debug ${FREETYPE_LIBRARY_DEBUG_PATH}
   optimized ${FREETYPE_LIBRARY_OPTIMIZED_PATH}
   debug ${GLEW_LIBRARY_DEBUG_PATH}
@@ -70,7 +74,9 @@ target_link_libraries(Scratch
   debug ${SDL_LIBRARY_DEBUG_PATH}
   optimized ${SDL_LIBRARY_OPTIMIZED_PATH}
   debug ${SDL_TTF_LIBRARY_DEBUG_PATH}
-  optimized ${SDL_TTF_LIBRARY_OPTIMIZED_PATH})
+  optimized ${SDL_TTF_LIBRARY_OPTIMIZED_PATH}
+  debug ${ZLIB_LIBRARY_DEBUG_PATH}
+  optimized ${ZLIB_LIBRARY_OPTIMIZED_PATH})
 if(WIN32)
   target_link_libraries(Scratch Imm32.lib opengl32.lib Setupapi.lib Version.lib
     winmm.lib)

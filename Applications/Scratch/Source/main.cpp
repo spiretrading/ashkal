@@ -13,6 +13,7 @@
 #include <boost/compute/interop/opengl/context.hpp>
 #include <boost/compute/interop/opengl/opengl_texture.hpp>
 #include "Ashkal/Camera.hpp"
+#include "Ashkal/MeshLoader.hpp"
 #include "Ashkal/Scene.hpp"
 #include "Ashkal/SdlSurfaceColorSampler.hpp"
 #include "Ashkal/ShadingSample.hpp"
@@ -398,6 +399,17 @@ std::unique_ptr<Scene> make_scene(const std::vector<std::vector<int>>& map) {
   return scene;
 }
 
+std::unique_ptr<Scene> make_object_viewer(const std::filesystem::path& path) {
+  auto scene = std::make_unique<Scene>();
+  scene->set(AmbientLight(Color(255, 255, 255, 255), .7));
+  scene->set(DirectionalLight(
+    normalize(Vector(.2, -1, 0.3)), Color(255, 255, 240, 255), .8));
+  auto mesh = load_mesh(path);
+  auto model = std::make_unique<Model>(std::move(mesh));
+  scene->add(std::move(model));
+  return scene;
+}
+
 auto make_shader(int width, int height) {
   auto texture_id = GLuint();
   glGenTextures(1, &texture_id);
@@ -515,7 +527,8 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
   auto cy = 2;
   auto camera = Camera(
     Point(2 * cx, 1, -2 * (depth - cy)), Vector(0, 0, -1), Vector(0, 1, 0));
-  auto scene = make_scene(level_map);
+//  auto scene = make_scene(level_map);
+  auto scene = make_object_viewer("Lowpoly_tree_sample.obj");
   auto is_running = true;
   auto event = SDL_Event();
   auto window_id = SDL_GetWindowID(window);
