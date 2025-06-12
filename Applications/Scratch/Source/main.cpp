@@ -123,7 +123,7 @@ void render(const ShadedVertex& a, const ShadedVertex& b, const ShadedVertex& c,
   }
 }
 
-const auto THRESHOLD = .5f;
+const auto THRESHOLD = 1.f;
 
 bool is_in_front(const Point& point) {
   return point.m_z < THRESHOLD;
