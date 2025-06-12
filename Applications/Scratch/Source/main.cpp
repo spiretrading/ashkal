@@ -3,7 +3,6 @@
 #include <numbers>
 #include <utility>
 #include <vector>
-#include <immintrin.h>
 #include <boost/compute.hpp>
 #include <GL/glew.h>
 #include <SDL.h>
@@ -23,19 +22,12 @@
 using namespace Ashkal;
 using namespace boost;
 
-Point transform(const Point& point, const Camera& camera) {
-  auto rel = point - camera.get_position();
-  return Point(dot(rel, camera.get_right()),
-    dot(rel, camera.get_orientation()), dot(rel, -camera.get_direction()));
-}
-
 std::pair<int, int> project_to_screen(
     const Point& point, int width, int height) {
-  const auto NEAR_PLANE = 0.001f;
-  const auto EYE_ORIGIN = 1;
-  auto camera = Point(point.m_x, point.m_y, point.m_z - EYE_ORIGIN);
+  const auto THRESHOLD = 1e-5f;
+  auto camera = Point(point.m_x, point.m_y, point.m_z + Camera::NEAR_PLANE_Z);
   if(camera.m_z >= 0) {
-    camera.m_z = -NEAR_PLANE;
+    camera.m_z = -THRESHOLD;
   }
   auto perspective = 1 / -camera.m_z;
   auto normalized_x = (height * camera.m_x * perspective) / width;
@@ -123,20 +115,14 @@ void render(const ShadedVertex& a, const ShadedVertex& b, const ShadedVertex& c,
   }
 }
 
-const auto THRESHOLD = 1.f;
-
-bool is_in_front(const Point& point) {
-  return point.m_z < THRESHOLD;
-}
-
 float compute_interpolation_parameter(const Point& a, const Point& b) {
-  return (a.m_z - THRESHOLD) / (a.m_z - b.m_z);
+  return (a.m_z - Camera::NEAR_PLANE_Z) / (a.m_z - b.m_z);
 }
 
 Point intersect_near_plane(const Point& a, const Point& b, float t) {
-  const auto NEAR_EPS = 1e-5f;
+  const auto THRESHOLD = 1e-5f;
   return Point(a.m_x + t * (b.m_x - a.m_x), a.m_y + t * (b.m_y - a.m_y),
-    THRESHOLD - NEAR_EPS);
+    Camera::NEAR_PLANE_Z - THRESHOLD);
 }
 
 void process_edge(const ShadedVertex& a, const ShadedVertex& b,
@@ -201,19 +187,19 @@ void render(const Model& model, const Fragment& fragment,
   auto& vertices = model.get_mesh().m_vertices;
   auto& a = vertices[triangle.m_a];
   auto shaded_a =
-    ShadedVertex(transform(transformation * a.m_position, camera), a.m_uv,
+    ShadedVertex(world_to_view(transformation * a.m_position, camera), a.m_uv,
       calculate_shading(scene.get_ambient_light()) +
         calculate_shading(scene.get_directional_light(),
           transform_normal(transformation, a.m_normal)));
   auto& b = vertices[triangle.m_b];
   auto shaded_b =
-    ShadedVertex(transform(transformation * b.m_position, camera), b.m_uv,
+    ShadedVertex(world_to_view(transformation * b.m_position, camera), b.m_uv,
       calculate_shading(scene.get_ambient_light()) +
         calculate_shading(scene.get_directional_light(),
           transform_normal(transformation, b.m_normal)));
   auto& c = vertices[triangle.m_c];
   auto shaded_c =
-    ShadedVertex(transform(transformation * c.m_position, camera), c.m_uv,
+    ShadedVertex(world_to_view(transformation * c.m_position, camera), c.m_uv,
       calculate_shading(scene.get_ambient_light()) +
         calculate_shading(scene.get_directional_light(),
           transform_normal(transformation, c.m_normal)));
@@ -424,52 +410,107 @@ auto make_shader(int width, int height) {
   return texture_id;
 }
 
-auto render_text(const std::string& message, SDL_Color color, int font_size) {
-  auto texture = GLuint(0);
-  auto font = TTF_OpenFont("C:\\Windows\\Fonts\\arial.ttf", font_size);
-  if(!font) {
-    return std::tuple(0, 0, texture);
-  }
-  auto surface = TTF_RenderText_Blended(font, message.c_str(), color);
-  if(!surface) {
-    TTF_CloseFont(font);
-    return std::tuple(0, 0, texture);
-  }
-  glGenTextures(1, &texture);
-  glBindTexture(GL_TEXTURE_2D, texture);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-  auto width = surface->w;
-  auto height = surface->h;
-  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_BGRA,
-    GL_UNSIGNED_BYTE, surface->pixels);
-  glBindTexture(GL_TEXTURE_2D, 0);
-  SDL_FreeSurface(surface);
-  TTF_CloseFont(font);
-  return std::tuple(width, height, texture);
-}
 
-void draw_text(const std::string& text, int size, int x, int y,
-    const SDL_Color& color) {
-  auto [width, height, texture] = render_text(text, color, size);
-  glBindTexture(GL_TEXTURE_2D, texture);
-  glEnable(GL_BLEND);
-  glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-  glBegin(GL_QUADS);
-  glTexCoord2f(0.f, 0.f);
-  glVertex2f(0.f, 0.f);
-  glTexCoord2f(1.f, 0.f);
-  glVertex2f(static_cast<float>(width), 0.f);
-  glTexCoord2f(1.f, 1.f);
-  glVertex2f(static_cast<float>(width), static_cast<float>(height));
-  glTexCoord2f(0.f, 1.f);
-  glVertex2f(0.f, static_cast<float>(height));
-  glEnd();
-  glDisable(GL_BLEND);
-  glBlendFunc(GL_ONE, GL_ZERO);
-  glBindTexture(GL_TEXTURE_2D, 0);
-  glDeleteTextures(1, &texture);
-}
+class TextRenderer {
+public:
+    /**
+     * Constructs the TextRenderer with given font file and size.
+     * Initializes SDL_ttf and loads the font.
+     */
+    TextRenderer(const std::filesystem::path& fontPath, int fontSize) {
+        if (TTF_WasInit() == 0) {
+            if (TTF_Init() != 0)
+                throw std::runtime_error("TTF_Init failed");
+        }
+        font_ = TTF_OpenFont(fontPath.string().c_str(), fontSize);
+        if (!font_)
+            throw std::runtime_error("Failed to load font");
+        lineSkip_ = TTF_FontLineSkip(font_);
+    }
+
+    ~TextRenderer() {
+        if (font_) TTF_CloseFont(font_);
+    }
+
+    /**
+     * Renders the given text into the provided frame buffer at (x,y) with specified color.
+     * Origin (0,0) is top-left of the buffer. Supports '\n' for line breaks.
+     * frameBuffer is a vector<uint32_t> of size fbWidth*fbHeight in RGBA (little-endian).
+     */
+    void render(std::string_view text,
+                float x, float y,
+                Ashkal::Color color,
+                std::vector<uint32_t>& frameBuffer,
+                int fbWidth, int fbHeight) {
+        float cursorX = x;
+        float cursorY = y;
+        size_t pos = 0;
+        while (pos < text.size()) {
+            size_t next = text.find('\n', pos);
+            std::string line(text.substr(pos, next - pos));
+            renderLineToBuffer(line,
+                               static_cast<int>(cursorX),
+                               static_cast<int>(cursorY),
+                               color,
+                               frameBuffer,
+                               fbWidth, fbHeight);
+            if (next == std::string::npos) break;
+            cursorY += float(lineSkip_);
+            cursorX = x;
+            pos = next + 1;
+        }
+    }
+
+private:
+    TTF_Font* font_{nullptr};
+    int lineSkip_{0};
+
+    void renderLineToBuffer(const std::string& line,
+                            int x, int y,
+                            Ashkal::Color color,
+                            std::vector<uint32_t>& frameBuffer,
+                            int fbWidth, int fbHeight) {
+        if (line.empty()) return;
+        SDL_Color sdlColor{color.m_red, color.m_green, color.m_blue, color.m_alpha};
+        SDL_Surface* surf = TTF_RenderText_Blended(font_, line.c_str(), sdlColor);
+        if (!surf) return;
+        if (SDL_LockSurface(surf) != 0) {
+            SDL_FreeSurface(surf);
+            return;
+        }
+        Uint32* pixels = static_cast<Uint32*>(surf->pixels);
+        SDL_PixelFormat* fmt = surf->format;
+        for (int row = 0; row < surf->h; ++row) {
+            for (int col = 0; col < surf->w; ++col) {
+                Uint32 pix = pixels[row * surf->w + col];
+                Uint8 sr, sg, sb, sa;
+                SDL_GetRGBA(pix, fmt, &sr, &sg, &sb, &sa);
+                if (sa == 0) continue;
+                int fbX = x + col;
+                int fbY = y + row;
+                if (fbX < 0 || fbX >= fbWidth || fbY < 0 || fbY >= fbHeight)
+                    continue;
+                size_t idx = fbY * static_cast<size_t>(fbWidth) + fbX;
+                uint32_t dst = frameBuffer[idx];
+                Uint8 dr = dst & 0xFF;
+                Uint8 dg = (dst >> 8) & 0xFF;
+                Uint8 db = (dst >> 16) & 0xFF;
+                Uint8 da = (dst >> 24) & 0xFF;
+                float alpha = sa / 255.0f;
+                Uint8 outR = static_cast<Uint8>(sr * alpha + dr * (1 - alpha));
+                Uint8 outG = static_cast<Uint8>(sg * alpha + dg * (1 - alpha));
+                Uint8 outB = static_cast<Uint8>(sb * alpha + db * (1 - alpha));
+                Uint8 outA = static_cast<Uint8>(sa + da * (1 - alpha));
+                frameBuffer[idx] = (static_cast<uint32_t>(outA) << 24) |
+                                    (static_cast<uint32_t>(outB) << 16) |
+                                    (static_cast<uint32_t>(outG) << 8)  |
+                                     static_cast<uint32_t>(outR);
+            }
+        }
+        SDL_UnlockSurface(surf);
+        SDL_FreeSurface(surf);
+    }
+};
 
 int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
     LPSTR pCmdLine, int nCmdShow) {
@@ -479,7 +520,6 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
     std::cout << "Error initializing SDL: " << SDL_GetError() << std::endl;
     return 1;
   }
-  TTF_Init();
   SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
   SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 1);
   const auto WIDTH = 640;
@@ -491,34 +531,21 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
     std::cout << "Error creating window: " << SDL_GetError() << std::endl;
     return 1;
   }
+  auto renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_PRESENTVSYNC);
+  if(!renderer) {
+    std::cout << "Error creating renderer: " << SDL_GetError() << std::endl;
+    return 1;
+  }
+  auto texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ABGR8888,
+    SDL_TEXTUREACCESS_STREAMING, WIDTH, HEIGHT);
+  if(!texture) {
+    std::cout << "Error creating texture: " << SDL_GetError() << std::endl;
+    return 1;
+  }
   SDL_ShowCursor(SDL_DISABLE);
   SDL_SetWindowGrab(window, SDL_TRUE);
   SDL_SetRelativeMouseMode(SDL_TRUE);
-  auto gl_context = SDL_GL_CreateContext(window);
-  if(glewInit() != GLEW_OK) {
-    std::cout << "Error initializing GLEW." << std::endl;
-    return 1;
-  }
-  if(SDL_GL_SetSwapInterval(1) < 0) {
-    std::cout <<
-      "Warning: Unable to set VSync: " << SDL_GetError() << std::endl;
-    return 1;
-  }
-  compute::context m_context(compute::opengl_create_shared_context());
-  glViewport(0, 0, WIDTH, HEIGHT);
-  glMatrixMode(GL_PROJECTION);
-  glLoadIdentity();
-  glOrtho(0.0, WIDTH, HEIGHT, 0.0, 1.0, -1.0);
-  glMatrixMode(GL_MODELVIEW);
-  glLoadIdentity();
-  glEnable(GL_TEXTURE_2D);
-  auto texture_id = make_shader(WIDTH, HEIGHT);
-  auto texture =
-    compute::opengl_texture(m_context, GL_TEXTURE_2D, 0, texture_id,
-      compute::opengl_texture::mem_flags::write_only);
-  glClear(GL_COLOR_BUFFER_BIT);
-  glLoadIdentity();
-  glTranslatef(0.f, 0.f, 0.f);
+  auto text_renderer = TextRenderer("C:\\Windows\\Fonts\\arial.ttf", 12);
   auto frame_buffer = std::vector<std::uint32_t>(WIDTH * HEIGHT, 0);
   auto depth_buffer =
     std::vector<float>(WIDTH * HEIGHT, std::numeric_limits<float>::infinity());
@@ -540,7 +567,6 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
     std::fill(frame_buffer.begin(), frame_buffer.end(), 0);
     std::fill(depth_buffer.begin(), depth_buffer.end(),
       std::numeric_limits<float>::infinity());
-    glClear(GL_COLOR_BUFFER_BIT);
     while(SDL_PollEvent(&event)) {
       if(event.type == SDL_WINDOWEVENT && event.window.windowID == window_id &&
           event.window.event == SDL_WINDOWEVENT_CLOSE) {
@@ -574,22 +600,6 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
     float deltaAngle = relX * 0.0025f; 
     tilt(camera, deltaAngle, 0);
     render(*scene, camera, frame_buffer, depth_buffer, WIDTH, HEIGHT);
-    glBindTexture(GL_TEXTURE_2D, texture_id);
-    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, WIDTH, HEIGHT, GL_RGBA,
-      GL_UNSIGNED_BYTE, frame_buffer.data());
-    glBindTexture(GL_TEXTURE_2D, 0);
-    glBindTexture(GL_TEXTURE_2D, texture_id);
-    glBegin(GL_QUADS);
-    glTexCoord2f(0.f, 0.f);
-    glVertex2f(0.f, 0.f);
-    glTexCoord2f(1.f, 0.f);
-    glVertex2f(static_cast<float>(WIDTH), 0.f);
-    glTexCoord2f(1.f, 1.f);
-    glVertex2f(static_cast<float>(WIDTH), static_cast<float>(HEIGHT));
-    glTexCoord2f(0.f, 1.f);
-    glVertex2f(0.f, static_cast<float>(HEIGHT));
-    glEnd();
-    glBindTexture(GL_TEXTURE_2D, 0);
     auto now = std::chrono::high_resolution_clock::now();
     auto elapsed = std::chrono::duration<float>(now - start_time).count();
     if(elapsed >= 1.f) {
@@ -598,18 +608,20 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
       start_time = now;
     }
     auto info = "Position: " +
-      lexical_cast<std::string>(camera.get_position()) + "   ";
+      lexical_cast<std::string>(camera.get_position()) + "\n";
     info += "Direction: " + lexical_cast<std::string>(camera.get_direction()) +
-      "   ";
+      "\n";
     info += "Orientation: " +
-      lexical_cast<std::string>(camera.get_orientation()) + "   ";
+      lexical_cast<std::string>(camera.get_orientation()) + "\n";
     info += "FPS: " + lexical_cast<std::string>(fps);
-    draw_text(info, 12, 0, 0, SDL_Color{.g=255, .a=255});
-    SDL_GL_SwapWindow(window);
+    text_renderer.render(info, 0, 0, Color(0, 255, 0, 255), frame_buffer, WIDTH, HEIGHT);
+    SDL_UpdateTexture(
+      texture, nullptr, frame_buffer.data(), WIDTH * sizeof(std::uint32_t));
+    SDL_RenderClear(renderer);
+    SDL_RenderCopy(renderer, texture, nullptr, nullptr);
+    SDL_RenderPresent(renderer);
   }
   SDL_DestroyWindow(window);
-  SDL_GL_DeleteContext(gl_context);
-  glDeleteTextures(1, &texture_id);
   SDL_Quit();
   return 0;
 }

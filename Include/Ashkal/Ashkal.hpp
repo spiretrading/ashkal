@@ -14,6 +14,7 @@ namespace Ashkal {
   struct MeshNode;
   class Model;
   struct Point;
+  template<typename> class Raster;
   struct Ray;
   class Scene;
   struct ShadingSample;

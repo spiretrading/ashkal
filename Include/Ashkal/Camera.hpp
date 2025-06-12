@@ -12,6 +12,9 @@ namespace Ashkal {
   class Camera {
     public:
 
+      /** The z-position of the near plane. */
+      static inline const auto NEAR_PLANE_Z = -1.f;
+
       /**
        * Constructs a Camera at the origin (0, 0, 0), facing forward (0, 0, 1),
        * and oriented upwards (0, 1, 0).
@@ -95,6 +98,19 @@ namespace Ashkal {
   /** Rolls the camera. */
   inline void roll(Camera& camera, float radians) {
     camera.apply(rotate(camera.get_direction(), radians));
+  }
+
+  /** Tests if a point is in front of the camera. */
+  inline bool is_in_front(const Point& point) {
+    return point.m_z < Camera::NEAR_PLANE_Z;
+  }
+
+  /** Transforms a point from the world space to camera space. */
+  inline Point world_to_view(const Point& point, const Camera& camera) {
+    auto delta = point - camera.get_position();
+    return Point(dot(delta, camera.get_right()),
+      dot(delta, camera.get_orientation()),
+      dot(delta, -camera.get_direction()));
   }
 
   inline Camera::Camera()
