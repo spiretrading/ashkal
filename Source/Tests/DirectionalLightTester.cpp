@@ -1,5 +1,5 @@
-#include <doctest/doctest.h>
 #include <boost/compute/container/vector.hpp>
+#include <doctest/doctest.h>
 #include "Ashkal/AmbientLight.hpp"
 #include "Ashkal/DirectionalLight.hpp"
 

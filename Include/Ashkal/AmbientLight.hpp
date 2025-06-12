@@ -41,7 +41,4 @@ namespace Ashkal {
     );
 }
 
-BOOST_COMPUTE_ADAPT_STRUCT(
-  Ashkal::AmbientLight, AmbientLight, (m_color, m_intensity));
-
 #endif

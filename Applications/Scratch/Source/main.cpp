@@ -13,6 +13,7 @@
 #include <boost/compute/interop/opengl/opengl_texture.hpp>
 #include "Ashkal/Camera.hpp"
 #include "Ashkal/MeshLoader.hpp"
+#include "Ashkal/Raster.hpp"
 #include "Ashkal/Scene.hpp"
 #include "Ashkal/SdlSurfaceColorSampler.hpp"
 #include "Ashkal/ShadingSample.hpp"
@@ -21,6 +22,9 @@
 
 using namespace Ashkal;
 using namespace boost;
+
+using FrameBuffer = Raster<Color>;
+using DepthBuffer = Raster<float>;
 
 std::pair<int, int> project_to_screen(
     const Point& point, int width, int height) {
@@ -50,19 +54,22 @@ struct ShadedVertex {
 };
 
 void render(const ShadedVertex& a, const ShadedVertex& b, const ShadedVertex& c,
-    const Material& material, std::vector<std::uint32_t>& frame_buffer,
-    std::vector<float>& depth_buffer, int width, int height) {
-  auto screen_a = project_to_screen(a.m_position, width, height);
-  auto screen_b = project_to_screen(b.m_position, width, height);
-  auto screen_c = project_to_screen(c.m_position, width, height);
+    const Material& material, FrameBuffer& frame_buffer,
+    DepthBuffer& depth_buffer) {
+  auto screen_a = project_to_screen(
+    a.m_position, frame_buffer.get_width(), frame_buffer.get_height());
+  auto screen_b = project_to_screen(
+    b.m_position, frame_buffer.get_width(), frame_buffer.get_height());
+  auto screen_c = project_to_screen(
+    c.m_position, frame_buffer.get_width(), frame_buffer.get_height());
   auto min_x =
     std::max(0, std::min({screen_a.first, screen_b.first, screen_c.first}));
-  auto max_x = std::min(
-    width - 1, std::max({screen_a.first, screen_b.first, screen_c.first}));
+  auto max_x = std::min(frame_buffer.get_width() - 1,
+    std::max({screen_a.first, screen_b.first, screen_c.first}));
   auto min_y =
     std::max(0, std::min({screen_a.second, screen_b.second, screen_c.second}));
-  auto max_y = std::min(
-    height - 1, std::max({screen_a.second, screen_b.second, screen_c.second}));
+  auto max_y = std::min(frame_buffer.get_height() - 1,
+    std::max({screen_a.second, screen_b.second, screen_c.second}));
   auto inv_z_a = -1 / (a.m_position.m_z - 1);
   auto inv_z_b = -1 / (b.m_position.m_z - 1);
   auto inv_z_c = -1 / (c.m_position.m_z - 1);
@@ -84,31 +91,27 @@ void render(const ShadedVertex& a, const ShadedVertex& b, const ShadedVertex& c,
         auto gamma = w2 / (w0 + w1 + w2);
         auto inv_z = alpha * inv_z_a + beta * inv_z_b + gamma * inv_z_c;
         auto depth = 1 / inv_z;
-        auto index = y * width + x;
-        if(depth < depth_buffer[index]) {
-          depth_buffer[index] = depth;
+        if(depth < depth_buffer(x, y)) {
+          depth_buffer(x, y) = depth;
           auto uv = TextureCoordinate(
             (alpha * uoz_a + beta * uoz_b + gamma * uoz_c) / inv_z,
             (alpha * voz_a + beta * voz_b + gamma * voz_c) / inv_z);
           auto texel = material.get_diffuseness().sample(uv);
           auto light_color = Color(
-            static_cast<std::uint8_t>(alpha * a.m_shading.m_color.m_red +
-              beta * b.m_shading.m_color.m_red +
-              gamma * c.m_shading.m_color.m_red),
-            static_cast<std::uint8_t>(alpha * a.m_shading.m_color.m_green +
-              beta * b.m_shading.m_color.m_green +
-              gamma * c.m_shading.m_color.m_green),
-            static_cast<std::uint8_t>(alpha * a.m_shading.m_color.m_blue +
-              beta * b.m_shading.m_color.m_blue +
-              gamma * c.m_shading.m_color.m_blue), 255);
+            static_cast<std::uint8_t>(alpha * a.m_shading.m_color.get_red() +
+              beta * b.m_shading.m_color.get_red() +
+              gamma * c.m_shading.m_color.get_red()),
+            static_cast<std::uint8_t>(alpha * a.m_shading.m_color.get_green() +
+              beta * b.m_shading.m_color.get_green() +
+              gamma * c.m_shading.m_color.get_green()),
+            static_cast<std::uint8_t>(alpha * a.m_shading.m_color.get_blue() +
+              beta * b.m_shading.m_color.get_blue() +
+              gamma * c.m_shading.m_color.get_blue()));
           auto intensity = alpha * a.m_shading.m_intensity +
             beta * b.m_shading.m_intensity + gamma * c.m_shading.m_intensity;
           auto shading = ShadingTerm(light_color, intensity);
           auto color = apply(shading, texel);
-          auto pixel = (std::uint32_t(color.m_alpha) << 24) |
-            (std::uint32_t(color.m_blue)  << 16) |
-            (std::uint32_t(color.m_green) << 8) | std::uint32_t(color.m_red);
-          frame_buffer[index] = pixel;
+          frame_buffer(x, y) = apply(shading, texel);
         }
       }
     }
@@ -182,8 +185,8 @@ Vector transform_normal(const Matrix& transformation, const Vector& normal) {
 
 void render(const Model& model, const Fragment& fragment,
     const VertexTriangle& triangle, const Scene& scene, const Camera& camera,
-    const Matrix& transformation, std::vector<std::uint32_t>& frame_buffer,
-    std::vector<float>& depth_buffer, int width, int height) {
+    const Matrix& transformation, FrameBuffer& frame_buffer,
+    DepthBuffer& depth_buffer) {
   auto& vertices = model.get_mesh().m_vertices;
   auto& a = vertices[triangle.m_a];
   auto shaded_a =
@@ -206,7 +209,7 @@ void render(const Model& model, const Fragment& fragment,
   if(is_in_front(shaded_a.m_position) && is_in_front(shaded_b.m_position) &&
       is_in_front(shaded_c.m_position)) {
     render(shaded_a, shaded_b, shaded_c, fragment.get_material(), frame_buffer,
-      depth_buffer, width, height);
+      depth_buffer);
     return;
   }
   auto clipped_vertices = std::array<const ShadedVertex*, 4>();
@@ -217,53 +220,48 @@ void render(const Model& model, const Fragment& fragment,
     return;
   }
   render(*clipped_vertices[0], *clipped_vertices[1], *clipped_vertices[2],
-    fragment.get_material(), frame_buffer, depth_buffer, width, height);
+    fragment.get_material(), frame_buffer, depth_buffer);
   if(clipped_count == 4) {
     render(*clipped_vertices[0], *clipped_vertices[2], *clipped_vertices[3],
-      fragment.get_material(), frame_buffer, depth_buffer, width, height);
+      fragment.get_material(), frame_buffer, depth_buffer);
   }
 }
 
 void render(const Model& model, const Fragment& fragment,
     const Scene& scene, const Camera& camera, const Matrix& transformation,
-    std::vector<std::uint32_t>& frame_buffer, std::vector<float>& depth_buffer,
-    int width, int height) {
+    FrameBuffer& frame_buffer, DepthBuffer& depth_buffer) {
   for(auto& triangle : fragment.get_triangles()) {
     render(model, fragment, triangle, scene, camera, transformation,
-      frame_buffer, depth_buffer, width, height);
+      frame_buffer, depth_buffer);
   }
 }
 
 void render(const Model& model, const MeshNode& node, const Scene& scene,
     const Camera& camera, const Matrix& parent_transformation,
-    std::vector<std::uint32_t>& frame_buffer, std::vector<float>& depth_buffer,
-    int width, int height) {
+    FrameBuffer& frame_buffer, DepthBuffer& depth_buffer) {
   auto next_transformation =
     parent_transformation * model.get_transformation().get_transformation(node);
   if(node.get_type() == MeshNode::Type::CHUNK) {
     for(auto& child : node.as_chunk()) {
       render(model, child, scene, camera, next_transformation, frame_buffer,
-        depth_buffer, width, height);
+        depth_buffer);
     }
   } else {
     render(model, node.as_fragment(), scene, camera, next_transformation,
-      frame_buffer, depth_buffer, width, height);
+      frame_buffer, depth_buffer);
   }
 }
 
 void render(const Model& model, const Scene& scene, const Camera& camera,
-    std::vector<std::uint32_t>& frame_buffer, std::vector<float>& depth_buffer,
-    int width, int height) {
+    FrameBuffer& frame_buffer, DepthBuffer& depth_buffer) {
   render(model, model.get_mesh().m_root, scene, camera, Matrix::IDENTITY(),
-    frame_buffer, depth_buffer, width, height);
+    frame_buffer, depth_buffer);
 }
 
-void render(const Scene& scene, const Camera& camera,
-    std::vector<std::uint32_t>& frame_buffer, std::vector<float>& depth_buffer,
-    int width, int height) {
+void render(const Scene& scene, const Camera& camera, FrameBuffer& frame_buffer,
+    DepthBuffer& depth_buffer) {
   for(auto i = 0; i != scene.get_model_count(); ++i) {
-    render(scene.get_model(i), scene, camera, frame_buffer, depth_buffer, width,
-      height);
+    render(scene.get_model(i), scene, camera, frame_buffer, depth_buffer);
   }
 }
 
@@ -396,21 +394,6 @@ std::unique_ptr<Scene> make_object_viewer(const std::filesystem::path& path) {
   return scene;
 }
 
-auto make_shader(int width, int height) {
-  auto texture_id = GLuint();
-  glGenTextures(1, &texture_id);
-  glBindTexture(GL_TEXTURE_2D, texture_id);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA,
-    GL_UNSIGNED_BYTE, nullptr);
-  glBindTexture(GL_TEXTURE_2D, 0);
-  return texture_id;
-}
-
-
 class TextRenderer {
 public:
     /**
@@ -440,8 +423,7 @@ public:
     void render(std::string_view text,
                 float x, float y,
                 Ashkal::Color color,
-                std::vector<uint32_t>& frameBuffer,
-                int fbWidth, int fbHeight) {
+                FrameBuffer& frameBuffer) {
         float cursorX = x;
         float cursorY = y;
         size_t pos = 0;
@@ -452,8 +434,7 @@ public:
                                static_cast<int>(cursorX),
                                static_cast<int>(cursorY),
                                color,
-                               frameBuffer,
-                               fbWidth, fbHeight);
+                               frameBuffer);
             if (next == std::string::npos) break;
             cursorY += float(lineSkip_);
             cursorX = x;
@@ -468,10 +449,9 @@ private:
     void renderLineToBuffer(const std::string& line,
                             int x, int y,
                             Ashkal::Color color,
-                            std::vector<uint32_t>& frameBuffer,
-                            int fbWidth, int fbHeight) {
+                            FrameBuffer& frameBuffer) {
         if (line.empty()) return;
-        SDL_Color sdlColor{color.m_red, color.m_green, color.m_blue, color.m_alpha};
+        SDL_Color sdlColor{color.get_red(), color.get_green(), color.get_blue(), color.get_alpha()};
         SDL_Surface* surf = TTF_RenderText_Blended(font_, line.c_str(), sdlColor);
         if (!surf) return;
         if (SDL_LockSurface(surf) != 0) {
@@ -488,10 +468,11 @@ private:
                 if (sa == 0) continue;
                 int fbX = x + col;
                 int fbY = y + row;
-                if (fbX < 0 || fbX >= fbWidth || fbY < 0 || fbY >= fbHeight)
+                if (fbX < 0 || fbX >= frameBuffer.get_width() || fbY < 0 ||
+                    fbY >= frameBuffer.get_height()) {
                     continue;
-                size_t idx = fbY * static_cast<size_t>(fbWidth) + fbX;
-                uint32_t dst = frameBuffer[idx];
+                }
+                uint32_t dst = frameBuffer(fbX, fbY).as_rgba();
                 Uint8 dr = dst & 0xFF;
                 Uint8 dg = (dst >> 8) & 0xFF;
                 Uint8 db = (dst >> 16) & 0xFF;
@@ -501,10 +482,7 @@ private:
                 Uint8 outG = static_cast<Uint8>(sg * alpha + dg * (1 - alpha));
                 Uint8 outB = static_cast<Uint8>(sb * alpha + db * (1 - alpha));
                 Uint8 outA = static_cast<Uint8>(sa + da * (1 - alpha));
-                frameBuffer[idx] = (static_cast<uint32_t>(outA) << 24) |
-                                    (static_cast<uint32_t>(outB) << 16) |
-                                    (static_cast<uint32_t>(outG) << 8)  |
-                                     static_cast<uint32_t>(outR);
+                frameBuffer(fbX, fbY) = Color(outR, outG, outB, outA);
             }
         }
         SDL_UnlockSurface(surf);
@@ -536,7 +514,7 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
     std::cout << "Error creating renderer: " << SDL_GetError() << std::endl;
     return 1;
   }
-  auto texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ABGR8888,
+  auto texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888,
     SDL_TEXTUREACCESS_STREAMING, WIDTH, HEIGHT);
   if(!texture) {
     std::cout << "Error creating texture: " << SDL_GetError() << std::endl;
@@ -546,9 +524,8 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
   SDL_SetWindowGrab(window, SDL_TRUE);
   SDL_SetRelativeMouseMode(SDL_TRUE);
   auto text_renderer = TextRenderer("C:\\Windows\\Fonts\\arial.ttf", 12);
-  auto frame_buffer = std::vector<std::uint32_t>(WIDTH * HEIGHT, 0);
-  auto depth_buffer =
-    std::vector<float>(WIDTH * HEIGHT, std::numeric_limits<float>::infinity());
+  auto frame_buffer = FrameBuffer(WIDTH, HEIGHT);
+  auto depth_buffer = DepthBuffer(WIDTH, HEIGHT);
   auto depth = int(level_map.size());
   auto cx = 3;
   auto cy = 2;
@@ -564,9 +541,8 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
   auto fps = 0.f;
   while(is_running) {
     ++frame_count;
-    std::fill(frame_buffer.begin(), frame_buffer.end(), 0);
-    std::fill(depth_buffer.begin(), depth_buffer.end(),
-      std::numeric_limits<float>::infinity());
+    frame_buffer.fill(Color(0));
+    depth_buffer.fill(std::numeric_limits<float>::infinity());
     while(SDL_PollEvent(&event)) {
       if(event.type == SDL_WINDOWEVENT && event.window.windowID == window_id &&
           event.window.event == SDL_WINDOWEVENT_CLOSE) {
@@ -599,7 +575,7 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
     SDL_GetRelativeMouseState(&relX, &relY);
     float deltaAngle = relX * 0.0025f; 
     tilt(camera, deltaAngle, 0);
-    render(*scene, camera, frame_buffer, depth_buffer, WIDTH, HEIGHT);
+    render(*scene, camera, frame_buffer, depth_buffer);
     auto now = std::chrono::high_resolution_clock::now();
     auto elapsed = std::chrono::duration<float>(now - start_time).count();
     if(elapsed >= 1.f) {
@@ -614,7 +590,7 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
     info += "Orientation: " +
       lexical_cast<std::string>(camera.get_orientation()) + "\n";
     info += "FPS: " + lexical_cast<std::string>(fps);
-    text_renderer.render(info, 0, 0, Color(0, 255, 0, 255), frame_buffer, WIDTH, HEIGHT);
+    text_renderer.render(info, 0, 0, Color(0, 255, 0, 255), frame_buffer);
     SDL_UpdateTexture(
       texture, nullptr, frame_buffer.data(), WIDTH * sizeof(std::uint32_t));
     SDL_RenderClear(renderer);

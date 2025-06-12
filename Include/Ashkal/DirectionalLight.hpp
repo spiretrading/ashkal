@@ -34,7 +34,4 @@ namespace Ashkal {
       });
 }
 
-BOOST_COMPUTE_ADAPT_STRUCT(Ashkal::DirectionalLight,
-  DirectionalLight, (m_direction, m_color, m_intensity));
-
 #endif
