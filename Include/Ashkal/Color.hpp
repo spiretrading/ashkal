@@ -2,22 +2,14 @@
 #define ASHKAL_COLOR_HPP
 #include <cstdint>
 #include <ostream>
-#include <string>
-#include <boost/compute/types/struct.hpp>
-#include <boost/compute/utility/source.hpp>
-#include "Ashkal/Ashkal.hpp"
 
 namespace Ashkal {
 
-  /**
-   * Represents an RGBA color packed into a 32-bit unsigned integer.
-   */
+  /** Represents an RGBA color packed into a 32-bit unsigned integer. */
   class Color {
     public:
 
-      /**
-       * Constructs an opaque black color (0, 0, 0, 255).
-       */
+      /** Constructs an opaque black color (0, 0, 0, 255). */
       Color() noexcept;
 
       /**
@@ -145,34 +137,6 @@ namespace Ashkal {
   inline std::uint32_t Color::as_rgba() const noexcept {
     return m_rgba;
   }
-
-  inline std::string COLOR_CL_SOURCE = BOOST_COMPUTE_STRINGIZE_SOURCE(
-    Color make_color(unsigned char red, unsigned green, unsigned char blue,
-        unsigned char alpha) {
-      Color color;
-      color.m_red = red;
-      color.m_green = green;
-      color.m_blue = blue;
-      color.m_alpha = alpha;
-      return color;
-    }
-
-    Color add_color(Color left, Color right) {
-      return make_color(min((int)(left.m_red) + right.m_red, 255),
-        min((int)(left.m_green) + right.m_green, 255),
-        min((int)(left.m_blue) + right.m_blue, 255), left.m_alpha);
-    }
-
-    bool is_equal_color(Color left, Color right) {
-      return left.m_red == right.m_red && left.m_green == right.m_green &&
-        left.m_blue == right.m_blue && left.m_alpha == right.m_alpha;
-    }
-
-    void print_color(Color color) {
-      printf("Color(%hhu, %hhu, %hhu, %hhu)",
-        color.m_red, color.m_green, color.m_blue, color.m_alpha);
-    }
-  );
 }
 
 #endif

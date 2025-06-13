@@ -1,19 +1,29 @@
 #ifndef ASHKAL_MODEL_HPP
 #define ASHKAL_MODEL_HPP
-#include "Ashkal/Ashkal.hpp"
 #include "Ashkal/Mesh.hpp"
 #include "Ashkal/Transformation.hpp"
 
 namespace Ashkal {
+
+  /** Encapsulates a mesh and its spatial transformation. */
   class Model {
     public:
-      Model(Mesh mesh);
 
+      /**
+       * Constructs a Model from a mesh, initializing its transformation to
+       * identity.
+       * @param mesh The Mesh to be rendered by this model.
+       */
+      explicit Model(Mesh mesh);
+
+      /** Returns the mesh associated with this model. */
       const Mesh& get_mesh() const;
 
-      Transformation& get_transformation();
-
+      /** Returns this model's transformation. */
       const Transformation& get_transformation() const;
+
+      /** Returns this model's transformation. */
+      Transformation& get_transformation();
 
     private:
       Mesh m_mesh;
@@ -28,11 +38,11 @@ namespace Ashkal {
     return m_mesh;
   }
 
-  inline Transformation& Model::get_transformation() {
+  inline const Transformation& Model::get_transformation() const {
     return m_transformation;
   }
 
-  inline const Transformation& Model::get_transformation() const {
+  inline Transformation& Model::get_transformation() {
     return m_transformation;
   }
 }

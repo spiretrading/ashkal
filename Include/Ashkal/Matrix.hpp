@@ -3,7 +3,6 @@
 #include <array>
 #include <cmath>
 #include <ostream>
-#include "Ashkal/Ashkal.hpp"
 #include "Ashkal/Point.hpp"
 #include "Ashkal/Vector.hpp"
 
@@ -162,6 +161,13 @@ namespace Ashkal {
     return inverse;
   }
 
+  /**
+   * Adds each element of the right matrix to the corresponding element of the
+   * left matrix.
+   * @param left The left-hand operand.
+   * @param right The right-hand operand.
+   * @return A new Matrix containing the element-wise sum.
+   */
   inline Matrix operator +(Matrix left, const Matrix& right) {
     for(auto i = std::size_t(0); i != left.m_elements.size(); ++i) {
       left.m_elements[i] += right.m_elements[i];
@@ -169,6 +175,14 @@ namespace Ashkal {
     return left;
   }
 
+
+  /**
+   * Subtracts each element of the right matrix from the corresponding element
+   * of the left matrix.
+   * @param left The left-hand operand.
+   * @param right The right-hand operand.
+   * @return A new Matrix containing the element-wise difference.
+   */
   inline Matrix operator -(Matrix left, const Matrix& right) {
     for(auto i = std::size_t(0); i != left.m_elements.size(); ++i) {
       left.m_elements[i] -= right.m_elements[i];
@@ -176,6 +190,12 @@ namespace Ashkal {
     return left;
   }
 
+  /**
+   * Computes the product of two matrices.
+   * @param left The left-hand operand.
+   * @param right The right-hand operand.
+   * @return A new Matrix containing the product.
+   */
   inline Matrix operator *(const Matrix& left, const Matrix& right) {
     auto result = Matrix();
     for(auto y = 0; y != Matrix::HEIGHT; ++y) {
@@ -190,6 +210,12 @@ namespace Ashkal {
     return result;
   }
 
+  /**
+   * Transforms a point by a matrix  using homogeneous coordinates.
+   * @param left The transformation matrix.
+   * @param right The point to transform.
+   * @return The transformed Point.
+   */
   inline Point operator *(const Matrix& left, const Point& right) {
     auto get = [&] (int x) {
       if(x == 0) {
@@ -221,6 +247,12 @@ namespace Ashkal {
     return result;
   }
 
+  /**
+   * Transforms a vector by a matrix (ignoring translation).
+   * @param left The transformation matrix.
+   * @param right The vector to transform.
+   * @return The transformed Vector.
+   */
   inline Vector operator *(const Matrix& left, const Vector& right) {
     auto result = Vector();
     auto get = [&] (int x) {
@@ -252,6 +284,11 @@ namespace Ashkal {
     return result;
   }
 
+  /**
+   * Constructs a translation matrix.
+   * @param offset The translation vector.
+   * @return A Matrix representing the translation.
+   */
   inline Matrix translate(Vector offset) {
     auto translation = Matrix::IDENTITY();
     translation.set(3, 0, offset.m_x);
@@ -260,6 +297,12 @@ namespace Ashkal {
     return translation;
   }
 
+  /**
+   * Constructs a rotation matrix about an arbitrary axis.
+   * @param axis The axis of rotation (should be normalized).
+   * @param radians The rotation angle in radians.
+   * @return A Matrix representing the rotation.
+   */
   inline Matrix rotate(const Vector& axis, float radians) {
     auto x = axis.m_x;
     auto y = axis.m_y;
@@ -280,6 +323,11 @@ namespace Ashkal {
     return transform;
   }
 
+  /**
+   * Constructs a pitch rotation matrix (rotation about X-axis).
+   * @param radians The rotation angle in radians.
+   * @return A Matrix representing the pitch rotation.
+   */
   inline Matrix pitch(float radians) {
     auto transform = Matrix::IDENTITY();
     transform.set(1, 1, std::cos(radians));
@@ -289,6 +337,11 @@ namespace Ashkal {
     return transform;
   }
 
+  /**
+   * Constructs a yaw rotation matrix (rotation about Y-axis).
+   * @param radians The rotation angle in radians.
+   * @return A Matrix representing the yaw rotation.
+   */
   inline Matrix yaw(float radians) {
     auto transform = Matrix::IDENTITY();
     transform.set(0, 0, std::cos(radians));
@@ -298,6 +351,11 @@ namespace Ashkal {
     return transform;
   }
 
+  /**
+   * Constructs a roll rotation matrix (rotation about Z-axis).
+   * @param radians The rotation angle in radians.
+   * @return A Matrix representing the roll rotation.
+   */
   inline Matrix roll(float radians) {
     auto transform = Matrix::IDENTITY();
     transform.set(0, 0, std::cos(radians));
@@ -307,24 +365,44 @@ namespace Ashkal {
     return transform;
   }
 
+  /**
+   * Constructs a scaling matrix along the X-axis.
+   * @param factor Scale factor along the X direction.
+   * @return A Matrix representing the scaling.
+   */
   inline Matrix scale_x(float factor) {
     auto scale = Matrix::IDENTITY();
     scale.set(0, 0, factor);
     return scale;
   }
 
+  /**
+   * Constructs a scaling matrix along the Y-axis.
+   * @param factor Scale factor along the Y direction.
+   * @return A Matrix representing the scaling.
+   */
   inline Matrix scale_y(float factor) {
     auto scale = Matrix::IDENTITY();
     scale.set(1, 1, factor);
     return scale;
   }
 
+  /**
+   * Constructs a scaling matrix along the Z-axis.
+   * @param factor Scale factor along the Z direction.
+   * @return A Matrix representing the scaling.
+   */
   inline Matrix scale_z(float factor) {
     auto scale = Matrix::IDENTITY();
     scale.set(2, 2, factor);
     return scale;
   }
 
+  /**
+   * Constructs a uniform scaling matrix.
+   * @param factor Uniform scale factor for all three axes.
+   * @return A Matrix representing the uniform scaling.
+   */
   inline Matrix scale(float factor) {
     auto scale = Matrix::IDENTITY();
     scale.set(0, 0, factor);

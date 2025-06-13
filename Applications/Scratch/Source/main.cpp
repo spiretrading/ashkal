@@ -349,7 +349,7 @@ std::unique_ptr<Scene> make_scene(const std::vector<std::vector<int>>& map) {
   scene->set(DirectionalLight(
     normalize(Vector(.2, -1, 0.3)), Color(255, 255, 240, 255), .8));
   auto depth = int(map.size());
-  auto wall_texture = load_bitmap_sampler("texture1.bmp");
+  auto wall_texture = load_sampler("texture1.bmp");
   for(auto y = 0; y < depth; ++y) {
     for(auto x = 0; x < int(map[y].size()); ++x) {
       if(map[y][x] == 1) {

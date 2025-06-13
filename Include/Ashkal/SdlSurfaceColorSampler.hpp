@@ -1,13 +1,24 @@
 #ifndef ASHKAL_SDL_SURFACE_COLOR_SAMPLER_HPP
 #define ASHKAL_SDL_SURFACE_COLOR_SAMPLER_HPP
+#include <exception>
 #include <filesystem>
 #include <SDL.h>
-#include "Ashkal/Ashkal.hpp"
 #include "Ashkal/ColorSampler.hpp"
 
 namespace Ashkal {
-  class SdlSurfaceColorSampler : public ColorSampler {
+
+  /**
+   * Wraps an existing SDL_Surface and implements the ColorSampler interface to
+   * fetch pixel colors.
+   */
+  class SdlSurfaceColorSampler final : public ColorSampler {
     public:
+
+      /**
+       * Constructs a sampler for a given SDL surface, taking ownership of it.
+       * @param surface Reference to a valid SDL_Surface whose pixels will be
+       *        sampled.
+       */
       explicit SdlSurfaceColorSampler(SDL_Surface& surface);
 
       ~SdlSurfaceColorSampler() override;
@@ -18,9 +29,9 @@ namespace Ashkal {
       SDL_Surface* m_surface;
   };
 
-  inline std::shared_ptr<SdlSurfaceColorSampler> load_bitmap_sampler(
+  inline std::shared_ptr<SdlSurfaceColorSampler> load_sampler(
       const std::filesystem::path& path) {
-    auto surface = SDL_LoadBMP(path.string().c_str());
+    auto surface = IMG_Load(path.string().c_str());
     if(!surface) {
       throw std::runtime_error("Texture not found.");
     }

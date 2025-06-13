@@ -3,25 +3,53 @@
 #include <cstdint>
 #include <variant>
 #include <vector>
-#include "Ashkal/Ashkal.hpp"
 #include "Ashkal/Fragment.hpp"
 
 namespace Ashkal {
+
+  /**
+   * A node in the mesh hierarchy, representing either a leaf Fragment or an
+   * internal Chunk of child nodes.
+   */
   class MeshNode {
     public:
+
+      /** Discriminates the kind of content stored in this node. */
       enum class Type {
+
+        /** Leaf node containing a single Fragment. */
         FRAGMENT,
+
+        /** Internal node containing multiple child MeshNodes. */
         CHUNK
       };
 
+      /**
+       * Construct a leaf node holding a Fragment.
+       * @param fragment The Fragment to store in this mesh node.
+       */
       explicit MeshNode(Fragment fragment);
 
+
+      /**
+       * Construct an internal node holding a collection of children.
+       * @param children The list of MeshNode instances to form this chunk.
+       */
       explicit MeshNode(std::vector<MeshNode> children);
 
+      /** Returns the content type of this node. */
       Type get_type() const;
 
+      /**
+       * Returns the stored Fragment.
+       * @pre get_type() == Type::FRAGMENT
+       */
       const Fragment& as_fragment() const;
 
+      /**
+       * Returns the stored children.
+       * @pre get_type() == Type::CHUNK
+       */
       const std::vector<MeshNode>& as_chunk() const;
 
     private:

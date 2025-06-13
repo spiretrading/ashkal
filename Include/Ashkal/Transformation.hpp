@@ -2,17 +2,37 @@
 #define ASHKAL_TRANSFORMATION_HPP
 #include <unordered_map>
 #include <vector>
-#include "Ashkal/Ashkal.hpp"
 #include "Ashkal/Matrix.hpp"
 #include "Ashkal/Mesh.hpp"
 
 namespace Ashkal {
+
+  /**
+   * Builds and maintains a mapping from each MeshNode to a transformation
+   * matrix, allowing individual nodes (and their subtrees) to be transformed
+   * relative to their parent.
+   */
   class Transformation {
     public:
+
+      /**
+       * Constructs the transformation context for a mesh.
+       * @param mesh The Mesh whose node hierarchy to track.
+       */
       explicit Transformation(const Mesh& mesh);
 
+      /**
+       * Returns the current world-space transformation for a node.
+       * @param node The MeshNode whose matrix is requested.
+       * @return The transformation matrix for that node.
+       */
       const Matrix& get_transformation(const MeshNode& node) const;
 
+      /**
+       * Applies an additional transformation to a node and its subtree.
+       * @param transformation The matrix to prepend.
+       * @param node The MeshNode to transform.
+       */
       void apply(const Matrix& transformation, const MeshNode& node);
 
     private:

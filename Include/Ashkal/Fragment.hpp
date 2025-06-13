@@ -1,17 +1,31 @@
 #ifndef ASHKAL_FRAGMENT_HPP
 #define ASHKAL_FRAGMENT_HPP
-#include "Ashkal/Ashkal.hpp"
+#include <memory>
+#include <vector>
 #include "Ashkal/Material.hpp"
 #include "Ashkal/VertexTriangle.hpp"
 
 namespace Ashkal {
+
+  /**
+   * Represents a contiguous piece of geometry (made up of VertexTriangle
+   * instances) together with the Material used to shade it.
+   */
   class Fragment {
     public:
+
+      /**
+       * Constructs a fragment from a set of triangles and a material.
+       * @param triangles The triangles composing this fragment.
+       * @param material The material to apply.
+       */
       Fragment(std::vector<VertexTriangle> triangles,
         std::shared_ptr<Material> material);
 
+      /** Returns the triangles in this fragment. */
       const std::vector<VertexTriangle>& get_triangles() const;
 
+      /** Returns the material of this fragment. */
       const Material& get_material() const;
 
     private:

@@ -6,7 +6,6 @@
 #include <assimp/postprocess.h>
 #include <assimp/scene.h>
 #include <SDL_image.h>
-#include "Ashkal/Ashkal.hpp"
 #include "Ashkal/Material.hpp"
 #include "Ashkal/Mesh.hpp"
 #include "Ashkal/SdlSurfaceColorSampler.hpp"
@@ -14,6 +13,13 @@
 #include "Ashkal/VertexTriangle.hpp"
 
 namespace Ashkal {
+
+  /**
+   * Loads a Mesh from a file on disk.
+   * @param path The path to the mesh file to load (e.g., .obj, .ply).
+   * @return A Mesh populated with vertices and a root MeshNode.
+   * @throws std::runtime_error if the file cannot be read or parsing fails.
+   */
   inline Mesh load_mesh(const std::filesystem::path& path) {
     auto importer = Assimp::Importer();
     auto scene = importer.ReadFile(path.string(), aiProcess_Triangulate |
@@ -70,17 +76,17 @@ namespace Ashkal {
           auto texture_path = aiString();
           if(material->GetTexture(aiTextureType_DIFFUSE, 0, &texture_path) ==
               AI_SUCCESS) {
-            auto full_texture_path = base_directory / texture_path.C_Str();
-            if(auto surface = IMG_Load(full_texture_path.string().c_str())) {
-              return std::make_shared<SdlSurfaceColorSampler>(*surface);
+            try {
+              return load_sampler(base_directory / texture_path.C_Str());
+            } catch(const std::exception&) {
+              auto diffuse_color = aiColor3D(1, 1, 1);
+              material->Get(AI_MATKEY_COLOR_DIFFUSE, diffuse_color);
+              auto color = Color(
+                static_cast<std::uint8_t>(diffuse_color.r * 255),
+                static_cast<std::uint8_t>(diffuse_color.g * 255),
+                static_cast<std::uint8_t>(diffuse_color.b * 255), 255);
+              return std::make_shared<SolidColorSampler>(color);
             }
-            auto diffuse_color = aiColor3D(1, 1, 1);
-            material->Get(AI_MATKEY_COLOR_DIFFUSE, diffuse_color);
-            auto color = Color(
-              static_cast<std::uint8_t>(diffuse_color.r * 255),
-              static_cast<std::uint8_t>(diffuse_color.g * 255),
-              static_cast<std::uint8_t>(diffuse_color.b * 255), 255);
-            return std::make_shared<SolidColorSampler>(color);
           }
           auto diffuse_color = aiColor3D(1, 1, 1);
           material->Get(AI_MATKEY_COLOR_DIFFUSE, diffuse_color);

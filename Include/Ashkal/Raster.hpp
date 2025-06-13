@@ -1,6 +1,5 @@
 #ifndef ASHKAL_RASTER_HPP
 #define ASHKAL_RASTER_HPP
-#include "Ashkal/Ashkal.hpp"
 #include <algorithm>
 #include <vector>
 

@@ -1,31 +1,59 @@
 #ifndef ASHKAL_SCENE_HPP
 #define ASHKAL_SCENE_HPP
+#include <memory>
+#include <vector>
 #include "Ashkal/AmbientLight.hpp"
-#include "Ashkal/Ashkal.hpp"
 #include "Ashkal/DirectionalLight.hpp"
 #include "Ashkal/Model.hpp"
 
 namespace Ashkal {
+
+  /**
+   * Manages a collection of Models along with the lighting needed to shade an
+   * entire scene.
+   */
   class Scene {
     public:
+
+      /** Constructs an empty unlit Scene. */
       Scene();
 
+      /** Returns the number of models in the scene. */
       int get_model_count() const;
 
-      Model& get_model(int index);
-
+      /**
+       * Returns the model at a given index.
+       * @param index The index of the model.
+       * @return Reference to the requested Model.
+       */
       const Model& get_model(int index) const;
 
+      /**
+       * Returns the model at a given index.
+       * @param index The index of the model.
+       * @return Reference to the requested Model.
+       */
+      Model& get_model(int index);
+
+      /** Adds a model to the scene. */
       void add(std::unique_ptr<Model> model);
 
+      /**
+       * Removes a model from the scene.
+       * @param index The index of the model to remove.
+       */
       void remove_model(int index);
 
+      /** Returns the ambient light for the scene. */
       const AmbientLight& get_ambient_light() const;
 
+      /** Sets the scene's ambient light. */
       void set(const AmbientLight& light);
 
+      /** Returns the directional light for the scene. */
       const DirectionalLight& get_directional_light() const;
 
+      /** Sets the scene's directional light. */
       void set(const DirectionalLight& light);
 
     private:

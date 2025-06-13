@@ -1,7 +1,6 @@
 #ifndef ASHKAL_CAMERA_HPP
 #define ASHKAL_CAMERA_HPP
-#include <iostream>
-#include "Ashkal/Ashkal.hpp"
+#include <ostream>
 #include "Ashkal/Matrix.hpp"
 #include "Ashkal/Point.hpp"
 #include "Ashkal/Vector.hpp"
@@ -111,6 +110,12 @@ namespace Ashkal {
     return Point(dot(delta, camera.get_right()),
       dot(delta, camera.get_orientation()),
       dot(delta, -camera.get_direction()));
+  }
+
+  inline std::ostream& operator<<(std::ostream& out, const Camera& camera) {
+    return out << "Camera(" << camera.get_position() << ", " <<
+      camera.get_direction() << ", " << camera.get_orientation() << ", " <<
+      camera.get_right() << ')';
   }
 
   inline Camera::Camera()
