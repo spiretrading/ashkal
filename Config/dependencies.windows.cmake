@@ -3,10 +3,6 @@ set(ASSIMP_LIBRARY_DEBUG_PATH
   "${PROJECT_BINARY_DIR}/Dependencies/assimp-6.0.2/lib/Debug/assimp-vc143-mtd.lib")
 set(ASSIMP_LIBRARY_OPTIMIZED_PATH
   "${PROJECT_BINARY_DIR}/Dependencies/assimp-6.0.2/lib/Release/assimp-vc143-mt.lib")
-set(BOOST_INCLUDE_PATH
-  "${PROJECT_BINARY_DIR}/Dependencies/boost_1_88_0/include/boost-1_88")
-set(BOOST_DEBUG_PATH "${PROJECT_BINARY_DIR}/Dependencies/boost_1_88_0/lib")
-set(BOOST_OPTIMIZED_PATH "${PROJECT_BINARY_DIR}/Dependencies/boost_1_88_0/lib")
 set(FREETYPE_INCLUDE_PATH "${PROJECT_BINARY_DIR}/Dependencies/freetype-2.9.1/include")
 set(FREETYPE_LIBRARY_DEBUG_PATH
   "${PROJECT_BINARY_DIR}/Dependencies/freetype-2.9.1/build/Debug/freetyped.lib")

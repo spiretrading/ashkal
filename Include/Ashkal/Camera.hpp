@@ -101,7 +101,7 @@ namespace Ashkal {
 
   /** Tests if a point is in front of the camera. */
   inline bool is_in_front(const Point& point) {
-    return point.m_z < Camera::NEAR_PLANE_Z;
+    return point.m_z < -Camera::NEAR_PLANE_Z;
   }
 
   /** Transforms a point from the world space to camera space. */

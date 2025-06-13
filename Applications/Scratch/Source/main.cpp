@@ -3,14 +3,9 @@
 #include <numbers>
 #include <utility>
 #include <vector>
-#include <boost/compute.hpp>
-#include <GL/glew.h>
 #include <SDL.h>
 #include <SDL_ttf.h>
 #include <Windows.h>
-#include <boost/compute/interop/opengl/acquire.hpp>
-#include <boost/compute/interop/opengl/context.hpp>
-#include <boost/compute/interop/opengl/opengl_texture.hpp>
 #include "Ashkal/Camera.hpp"
 #include "Ashkal/MeshLoader.hpp"
 #include "Ashkal/Raster.hpp"
@@ -21,7 +16,6 @@
 #include "Version.hpp"
 
 using namespace Ashkal;
-using namespace boost;
 
 using FrameBuffer = Raster<Color>;
 using DepthBuffer = Raster<float>;
@@ -119,13 +113,13 @@ void render(const ShadedVertex& a, const ShadedVertex& b, const ShadedVertex& c,
 }
 
 float compute_interpolation_parameter(const Point& a, const Point& b) {
-  return (a.m_z - Camera::NEAR_PLANE_Z) / (a.m_z - b.m_z);
+  return (a.m_z + Camera::NEAR_PLANE_Z) / (a.m_z - b.m_z);
 }
 
 Point intersect_near_plane(const Point& a, const Point& b, float t) {
   const auto THRESHOLD = 1e-5f;
   return Point(a.m_x + t * (b.m_x - a.m_x), a.m_y + t * (b.m_y - a.m_y),
-    Camera::NEAR_PLANE_Z - THRESHOLD);
+    -Camera::NEAR_PLANE_Z - THRESHOLD);
 }
 
 void process_edge(const ShadedVertex& a, const ShadedVertex& b,
@@ -573,7 +567,7 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
     }
     int relX = 0, relY = 0;
     SDL_GetRelativeMouseState(&relX, &relY);
-    float deltaAngle = relX * 0.0025f; 
+    float deltaAngle = relX * 0.0025f;
     tilt(camera, deltaAngle, 0);
     render(*scene, camera, frame_buffer, depth_buffer);
     auto now = std::chrono::high_resolution_clock::now();
@@ -583,14 +577,12 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
       frame_count = 0;
       start_time = now;
     }
-    auto info = "Position: " +
-      lexical_cast<std::string>(camera.get_position()) + "\n";
-    info += "Direction: " + lexical_cast<std::string>(camera.get_direction()) +
-      "\n";
-    info += "Orientation: " +
-      lexical_cast<std::string>(camera.get_orientation()) + "\n";
-    info += "FPS: " + lexical_cast<std::string>(fps);
-    text_renderer.render(info, 0, 0, Color(0, 255, 0, 255), frame_buffer);
+    auto ss = std::stringstream();
+    ss << "Position: " << camera.get_position() << "\n" <<
+      "Direction: " << camera.get_direction() << "\n" <<
+      "Orientation: " << camera.get_orientation() << "\n" <<
+      "FPS: " << fps;
+    text_renderer.render(ss.str(), 0, 0, Color(0, 255, 0, 255), frame_buffer);
     SDL_UpdateTexture(
       texture, nullptr, frame_buffer.data(), WIDTH * sizeof(std::uint32_t));
     SDL_RenderClear(renderer);

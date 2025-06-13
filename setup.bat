@@ -132,23 +132,6 @@ IF %BUILD_NEEDED%==1 (
   cmake --build . --target INSTALL --config Release
   POPD
 )
-IF "%NUMBER_OF_PROCESSORS%" == "" (
-  SET BJAM_PROCESSORS=
-) ELSE (
-  SET BJAM_PROCESSORS="-j%NUMBER_OF_PROCESSORS%"
-)
-CALL :DownloadAndExtract "boost_1_88_0" ^
-  "https://archives.boost.io/release/1.88.0/source/boost_1_88_0.zip"
-IF %BUILD_NEEDED%==1 (
-  PUSHD boost_1_88_0
-  PUSHD tools\build
-  CALL bootstrap.bat vc143
-  POPD
-  tools\build\b2 !BJAM_PROCESSORS! --without-context ^
-    --prefix="!ROOT!\boost_1_88_0" --build-type=complete address-model=64 ^
-    toolset=msvc-14.3 link=static runtime-link=shared install
-  POPD
-)
 IF NOT EXIST cache_files (
   MD cache_files
 )
