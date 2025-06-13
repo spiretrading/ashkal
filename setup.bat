@@ -38,34 +38,6 @@ IF %BUILD_NEEDED%==1 (
   POPD
   POPD
 )
-IF NOT EXIST glew-2.1.0 (
-  wget https://sourceforge.net/projects/glew/files/glew/2.1.0/glew-2.1.0.zip/download -O glew-2.1.0.zip
-  IF !ERRORLEVEL! LEQ 0 (
-    tar -xf glew-2.1.0.zip
-    PUSHD glew-2.1.0
-    cd build
-    cmake -DCMAKE_INSTALL_PREFIX=!ROOT!\glew-2.1.0\build ./cmake
-    cmake --build . --target INSTALL --config Debug
-    cmake --build . --target INSTALL --config Release
-    POPD
-  ) ELSE (
-    SET EXIT_STATUS=1
-  )
-  DEL /F /Q glew-2.1.0.zip
-)
-IF NOT EXIST OpenCL-SDK (
-  git clone https://github.com/KhronosGroup/OpenCL-SDK.git
-  PUSHD OpenCL-SDK
-  git submodule init
-  git submodule update
-  MKDIR build
-  PUSHD build
-  cmake -DCMAKE_INSTALL_PREFIX=!ROOT!\OpenCL-SDK\build ..
-  cmake --build . --target INSTALL --config Debug
-  cmake --build . --target INSTALL --config Release
-  POPD
-  POPD
-)
 CALL :DownloadAndExtract "SDL2-2.0.16" ^
   "https://www.libsdl.org/release/SDL2-2.0.16.zip"
 IF %BUILD_NEEDED%==1 (

@@ -30,7 +30,6 @@ include(../../Config/dependencies.cmake)
 include_directories(${ASHKAL_INCLUDE_PATH})
 include_directories(SYSTEM ${ASSIMP_INCLUDE_PATH})
 include_directories(SYSTEM ${FREETYPE_INCLUDE_PATH})
-include_directories(SYSTEM ${OPENCL_INCLUDE_PATH})
 include_directories(SYSTEM ${SDL_INCLUDE_PATH})
 include_directories(SYSTEM ${SDL_IMAGE_INCLUDE_PATH})
 include_directories(SYSTEM ${SDL_TTF_INCLUDE_PATH})
@@ -62,10 +61,6 @@ target_link_libraries(Scratch
   optimized ${ASSIMP_LIBRARY_OPTIMIZED_PATH}
   debug ${FREETYPE_LIBRARY_DEBUG_PATH}
   optimized ${FREETYPE_LIBRARY_OPTIMIZED_PATH}
-  debug ${GLEW_LIBRARY_DEBUG_PATH}
-  optimized ${GLEW_LIBRARY_OPTIMIZED_PATH}
-  debug ${OPENCL_LIBRARY_DEBUG_PATH}
-  optimized ${OPENCL_LIBRARY_OPTIMIZED_PATH}
   debug ${SDL_LIBRARY_DEBUG_PATH}
   optimized ${SDL_LIBRARY_OPTIMIZED_PATH}
   debug ${SDL_IMAGE_LIBRARY_DEBUG_PATH}

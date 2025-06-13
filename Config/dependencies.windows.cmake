@@ -8,11 +8,6 @@ set(FREETYPE_LIBRARY_DEBUG_PATH
   "${PROJECT_BINARY_DIR}/Dependencies/freetype-2.9.1/build/Debug/freetyped.lib")
 set(FREETYPE_LIBRARY_OPTIMIZED_PATH
   "${PROJECT_BINARY_DIR}/Dependencies/freetype-2.9.1/build/Release/freetype.lib")
-set(GLEW_INCLUDE_PATH "${PROJECT_BINARY_DIR}/Dependencies/glew-2.1.0/include")
-set(GLEW_LIBRARY_DEBUG_PATH
-  "${PROJECT_BINARY_DIR}/Dependencies/glew-2.1.0/build/lib/libglew32d.lib")
-set(GLEW_LIBRARY_OPTIMIZED_PATH
-  "${PROJECT_BINARY_DIR}/Dependencies/glew-2.1.0/build/lib/libglew32.lib")
 set(SDL_INCLUDE_PATH
   "${PROJECT_BINARY_DIR}/Dependencies/SDL2-2.0.16/include")
 set(SDL_MAIN_LIBRARY_DEBUG_PATH
@@ -35,12 +30,6 @@ set(SDL_TTF_LIBRARY_DEBUG_PATH
   "${PROJECT_BINARY_DIR}/Dependencies/SDL2_ttf-2.0.15/build/Debug/SDL2_ttf.lib")
 set(SDL_TTF_LIBRARY_OPTIMIZED_PATH
   "${PROJECT_BINARY_DIR}/Dependencies/SDL2_ttf-2.0.15/build/Release/SDL2_ttf.lib")
-set(OPENCL_INCLUDE_PATH
-  "${PROJECT_BINARY_DIR}/Dependencies/OpenCL-SDK/external/OpenCL-Headers")
-set(OPENCL_LIBRARY_DEBUG_PATH
-  "${PROJECT_BINARY_DIR}/Dependencies/OpenCL-SDK/build/lib/OpenCL.lib")
-set(OPENCL_LIBRARY_OPTIMIZED_PATH
-  "${PROJECT_BINARY_DIR}/Dependencies/OpenCL-SDK/build/lib/OpenCL.lib")
 set(ZLIB_INCLUDE_PATH "${PROJECT_BINARY_DIR}/Dependencies/zlib-1.3.1")
 set(ZLIB_LIBRARY_DEBUG_PATH
   "${PROJECT_BINARY_DIR}/Dependencies/zlib-1.3.1/contrib/vstudio/vc17/x64/ZlibStatDebug/zlibstat.lib")
