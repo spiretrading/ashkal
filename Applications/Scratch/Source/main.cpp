@@ -1,6 +1,5 @@
 #include <iostream>
 #include <limits>
-#include <numbers>
 #include <utility>
 #include <vector>
 #include <SDL.h>
