@@ -1,7 +1,6 @@
 #ifndef ASHKAL_CAMERA_HPP
 #define ASHKAL_CAMERA_HPP
-#include <iostream>
-#include "Ashkal/Ashkal.hpp"
+#include <ostream>
 #include "Ashkal/Matrix.hpp"
 #include "Ashkal/Point.hpp"
 #include "Ashkal/Vector.hpp"
@@ -11,6 +10,9 @@ namespace Ashkal {
   /** Represents a camera within a voxel space. */
   class Camera {
     public:
+
+      /** The z-position of the near plane. */
+      static inline const auto NEAR_PLANE_Z = -1.f;
 
       /**
        * Constructs a Camera at the origin (0, 0, 0), facing forward (0, 0, 1),
@@ -76,10 +78,44 @@ namespace Ashkal {
     move_left(camera, -distance);
   }
 
+  /** Moves a camera up by a given distance. */
+  inline void move_up(Camera& camera, float distance) {
+    camera.apply(translate(distance * camera.get_orientation()));
+  }
+
+  /** Moves a camera down by a given distance. */
+  inline void move_down(Camera& camera, float distance) {
+    move_up(camera, -distance);
+  }
+
   /** Tilts a camera horizontally and vertically. */
   inline void tilt(Camera& camera, float tilt_x, float tilt_y) {
     camera.apply(translate(Vector(camera.get_position())) * yaw(tilt_x) *
       pitch(-tilt_y) * translate(-Vector(camera.get_position())));
+  }
+
+  /** Rolls the camera. */
+  inline void roll(Camera& camera, float radians) {
+    camera.apply(rotate(camera.get_direction(), radians));
+  }
+
+  /** Tests if a point is in front of the camera. */
+  inline bool is_in_front(const Point& point) {
+    return point.m_z < Camera::NEAR_PLANE_Z;
+  }
+
+  /** Transforms a point from the world space to camera space. */
+  inline Point world_to_view(const Point& point, const Camera& camera) {
+    auto delta = point - camera.get_position();
+    return Point(dot(delta, camera.get_right()),
+      dot(delta, camera.get_orientation()),
+      dot(delta, -camera.get_direction()));
+  }
+
+  inline std::ostream& operator<<(std::ostream& out, const Camera& camera) {
+    return out << "Camera(" << camera.get_position() << ", " <<
+      camera.get_direction() << ", " << camera.get_orientation() << ", " <<
+      camera.get_right() << ')';
   }
 
   inline Camera::Camera()

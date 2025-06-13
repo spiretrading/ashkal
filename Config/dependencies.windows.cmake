@@ -1,3 +1,8 @@
+set(ASSIMP_INCLUDE_PATH "${PROJECT_BINARY_DIR}/Dependencies/assimp-6.0.2/include")
+set(ASSIMP_LIBRARY_DEBUG_PATH
+  "${PROJECT_BINARY_DIR}/Dependencies/assimp-6.0.2/lib/Debug/assimp-vc143-mtd.lib")
+set(ASSIMP_LIBRARY_OPTIMIZED_PATH
+  "${PROJECT_BINARY_DIR}/Dependencies/assimp-6.0.2/lib/Release/assimp-vc143-mt.lib")
 set(BOOST_INCLUDE_PATH
   "${PROJECT_BINARY_DIR}/Dependencies/boost_1_88_0/include/boost-1_88")
 set(BOOST_DEBUG_PATH "${PROJECT_BINARY_DIR}/Dependencies/boost_1_88_0/lib")
@@ -22,6 +27,12 @@ set(SDL_MAIN_LIBRARY_OPTIMIZED_PATH
   "${PROJECT_BINARY_DIR}/Dependencies/SDL2-2.0.16/lib/SDL2main.lib")
 set(SDL_LIBRARY_OPTIMIZED_PATH
   "${PROJECT_BINARY_DIR}/Dependencies/SDL2-2.0.16/lib/SDL2-static.lib")
+set(SDL_IMAGE_INCLUDE_PATH
+  "${PROJECT_BINARY_DIR}/Dependencies/SDL2_image-2.8.8/include/SDL2")
+set(SDL_IMAGE_LIBRARY_DEBUG_PATH
+  "${PROJECT_BINARY_DIR}/Dependencies/SDL2_image-2.8.8/lib/SDL2_image-staticd.lib")
+set(SDL_IMAGE_LIBRARY_OPTIMIZED_PATH
+  "${PROJECT_BINARY_DIR}/Dependencies/SDL2_image-2.8.8/lib/SDL2_image-static.lib")
 set(SDL_TTF_INCLUDE_PATH
   "${PROJECT_BINARY_DIR}/Dependencies/SDL2_ttf-2.0.15/build/include/SDL2")
 set(SDL_TTF_LIBRARY_DEBUG_PATH
@@ -34,3 +45,8 @@ set(OPENCL_LIBRARY_DEBUG_PATH
   "${PROJECT_BINARY_DIR}/Dependencies/OpenCL-SDK/build/lib/OpenCL.lib")
 set(OPENCL_LIBRARY_OPTIMIZED_PATH
   "${PROJECT_BINARY_DIR}/Dependencies/OpenCL-SDK/build/lib/OpenCL.lib")
+set(ZLIB_INCLUDE_PATH "${PROJECT_BINARY_DIR}/Dependencies/zlib-1.3.1")
+set(ZLIB_LIBRARY_DEBUG_PATH
+  "${PROJECT_BINARY_DIR}/Dependencies/zlib-1.3.1/contrib/vstudio/vc17/x64/ZlibStatDebug/zlibstat.lib")
+set(ZLIB_LIBRARY_OPTIMIZED_PATH
+  "${PROJECT_BINARY_DIR}/Dependencies/zlib-1.3.1/contrib/vstudio/vc17/x64/ZlibStatReleaseWithoutAsm/zlibstat.lib")

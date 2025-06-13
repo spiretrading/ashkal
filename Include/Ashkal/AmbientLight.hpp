@@ -1,42 +1,39 @@
 #ifndef ASHKAL_AMBIENT_LIGHT_HPP
 #define ASHKAL_AMBIENT_LIGHT_HPP
-#include <string>
-#include <boost/compute/types/struct.hpp>
-#include <boost/compute/utility/source.hpp>
-#include "Ashkal/Ashkal.hpp"
-#include "Ashkal/Color.hpp"
+#include <ostream>
+#include "Ashkal/ShadingTerm.hpp"
 
 namespace Ashkal {
+
+  /**
+   * Represents an ambient light: uniform, non-directional illumination applied
+   * equally across all surfaces.
+   */
   struct AmbientLight {
+
+    /* RGB color of the ambient light in linear color space. */
     Color m_color;
 
+    /**
+     * Scalar intensity multiplier for brightness (0.0 means no contribution).
+     */
     float m_intensity;
   };
 
-  inline std::string AMBIENT_LIGHT_CL_SOURCE =
-    BOOST_COMPUTE_STRINGIZE_SOURCE(
-      Color apply_shading(
-          Color source, Color light, float shading_factor, float intensity) {
-        float r =
-          (source.m_red * light.m_red * shading_factor * intensity) / 255.f;
-        float g = (source.m_green *
-          light.m_green * shading_factor * intensity) / 255.f;
-        float b =
-          (source.m_blue * light.m_blue * shading_factor * intensity) / 255.f;
-        return make_color(r, g, b, source.m_alpha);
-      }
+  /**
+   * Computes the shading term for a given AmbientLight.
+   * @param light The ambient light to sample from.
+   * @return A ShadingTerm encapsulating the light's color and intensity.
+   */
+  inline ShadingTerm calculate_shading(const AmbientLight& light) {
+    return ShadingTerm(light.m_color, light.m_intensity);
+  }
 
-      float calculate_shading(Vector normal, Vector light_direction) {
-        return max(vector_dot(normal, light_direction), 0.f);
-      }
-
-      Color apply_ambient_light(AmbientLight light, Color color) {
-        return apply_shading(color, light.m_color, 1.f, light.m_intensity);
-      }
-    );
+  inline std::ostream& operator<<(std::ostream& out,
+      const AmbientLight& light) {
+    return out << "AmbientLight(" << light.m_color << ", " <<
+      light.m_intensity << ')';
+  }
 }
-
-BOOST_COMPUTE_ADAPT_STRUCT(
-  Ashkal::AmbientLight, AmbientLight, (m_color, m_intensity));
 
 #endif

@@ -1,30 +1,50 @@
 #ifndef ASHKAL_MODEL_HPP
 #define ASHKAL_MODEL_HPP
-#include "Ashkal/Ashkal.hpp"
-#include "Ashkal/Point.hpp"
-#include "Ashkal/Voxel.hpp"
+#include "Ashkal/Mesh.hpp"
+#include "Ashkal/Transformation.hpp"
 
 namespace Ashkal {
 
-  /** Stores a model made up of voxels. */
+  /** Encapsulates a mesh and its spatial transformation. */
   class Model {
     public:
-      virtual ~Model() = default;
 
       /**
-       * Returns the point representing the top-right corner of the model's
-       * bounding box. The point returned is exclusive.
+       * Constructs a Model from a mesh, initializing its transformation to
+       * identity.
+       * @param mesh The Mesh to be rendered by this model.
        */
-      virtual Point end() const = 0;
+      explicit Model(Mesh mesh);
 
-      /** Returns the voxel at a specified point. */
-      virtual Voxel get(Point point) const = 0;
+      /** Returns the mesh associated with this model. */
+      const Mesh& get_mesh() const;
 
-    protected:
+      /** Returns this model's transformation. */
+      const Transformation& get_transformation() const;
 
-      /** Constructs an empty Model. */
-      Model() = default;
+      /** Returns this model's transformation. */
+      Transformation& get_transformation();
+
+    private:
+      Mesh m_mesh;
+      Transformation m_transformation;
   };
+
+  inline Model::Model(Mesh mesh)
+    : m_mesh(std::move(mesh)),
+      m_transformation(m_mesh) {}
+
+  inline const Mesh& Model::get_mesh() const {
+    return m_mesh;
+  }
+
+  inline const Transformation& Model::get_transformation() const {
+    return m_transformation;
+  }
+
+  inline Transformation& Model::get_transformation() {
+    return m_transformation;
+  }
 }
 
 #endif

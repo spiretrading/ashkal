@@ -1,61 +1,112 @@
 #ifndef ASHKAL_SCENE_HPP
 #define ASHKAL_SCENE_HPP
 #include <memory>
+#include <vector>
 #include "Ashkal/AmbientLight.hpp"
 #include "Ashkal/DirectionalLight.hpp"
-#include "Ashkal/Ashkal.hpp"
 #include "Ashkal/Model.hpp"
-#include "Ashkal/Octree.hpp"
-#include "Ashkal/Point.hpp"
-#include "Ashkal/Vector.hpp"
 
 namespace Ashkal {
+
+  /**
+   * Manages a collection of Models along with the lighting needed to shade an
+   * entire scene.
+   */
   class Scene {
     public:
-      struct IntersectionResult {
-        Voxel m_voxel;
-        Point m_position;
-      };
 
-      Scene()
-        : m_root(Point(-2048, -2048, -2048), 4096) {}
+      /** Constructs an empty unlit Scene. */
+      Scene();
 
-      Voxel get(Point point) const {
-        return m_root.get(point);
-      }
+      /** Returns the number of models in the scene. */
+      int get_model_count() const;
 
-      IntersectionResult intersect(Point point, Vector direction) const {
-        auto intersection = IntersectionResult();
-        intersection.m_voxel = m_root.intersect(point, direction);
-        intersection.m_position = point;
-        return intersection;
-      }
+      /**
+       * Returns the model at a given index.
+       * @param index The index of the model.
+       * @return Reference to the requested Model.
+       */
+      const Model& get_model(int index) const;
 
-      AmbientLight get_ambient_light() const {
-        return m_ambient_light;
-      }
+      /**
+       * Returns the model at a given index.
+       * @param index The index of the model.
+       * @return Reference to the requested Model.
+       */
+      Model& get_model(int index);
 
-      void set(AmbientLight light) {
-        m_ambient_light = light;
-      }
+      /** Adds a model to the scene. */
+      void add(std::unique_ptr<Model> model);
 
-      DirectionalLight get_directional_light() const {
-        return m_directional_light;
-      }
+      /**
+       * Removes a model from the scene.
+       * @param index The index of the model to remove.
+       */
+      void remove_model(int index);
 
-      void set(DirectionalLight light) {
-        m_directional_light = light;
-      };
+      /** Returns the ambient light for the scene. */
+      const AmbientLight& get_ambient_light() const;
 
-      void add(std::shared_ptr<Model> model) {
-        m_root.add(model);
-      }
+      /** Sets the scene's ambient light. */
+      void set(const AmbientLight& light);
+
+      /** Returns the directional light for the scene. */
+      const DirectionalLight& get_directional_light() const;
+
+      /** Sets the scene's directional light. */
+      void set(const DirectionalLight& light);
 
     private:
+      std::vector<std::unique_ptr<Model>> m_models;
       AmbientLight m_ambient_light;
       DirectionalLight m_directional_light;
-      OctreeInternalNode m_root;
+
+      Scene(const Scene&) = delete;
+      Scene& operator =(const Scene&) = delete;
   };
+
+  inline Scene::Scene()
+    : m_ambient_light(Color(0, 0, 0, 255)) {}
+
+  inline int Scene::get_model_count() const {
+    return static_cast<int>(m_models.size());
+  }
+
+  inline Model& Scene::get_model(int index) {
+    return *m_models[index];
+  }
+
+  inline const Model& Scene::get_model(int index) const {
+    return *m_models[index];
+  }
+
+  inline void Scene::add(std::unique_ptr<Model> model) {
+    m_models.push_back(std::move(model));
+  }
+
+  inline void Scene::remove_model(int index) {
+    if(index == m_models.size() - 1) {
+      m_models.pop_back();
+    }
+    std::swap(m_models[index], m_models.back());
+    m_models.pop_back();
+  }
+
+  inline const AmbientLight& Scene::get_ambient_light() const {
+    return m_ambient_light;
+  }
+
+  inline void Scene::set(const AmbientLight& light) {
+    m_ambient_light = light;
+  }
+
+  inline const DirectionalLight& Scene::get_directional_light() const {
+    return m_directional_light;
+  }
+
+  inline void Scene::set(const DirectionalLight& light) {
+    m_directional_light = light;
+  }
 }
 
 #endif

@@ -1,7 +1,7 @@
-#include <doctest/doctest.h>
 #include <iostream>
 #include <numbers>
 #include <stdexcept>
+#include <doctest/doctest.h>
 #include "Ashkal/Camera.hpp"
 
 using namespace Ashkal;
