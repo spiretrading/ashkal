@@ -1,7 +1,7 @@
 #ifndef ASHKAL_MESH_LOADER_HPP
 #define ASHKAL_MESH_LOADER_HPP
-#include <exception>
 #include <filesystem>
+#include <stdexcept>
 #include <assimp/Importer.hpp>
 #include <assimp/postprocess.h>
 #include <assimp/scene.h>

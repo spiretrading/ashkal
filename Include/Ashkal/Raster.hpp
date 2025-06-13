@@ -59,6 +59,12 @@ namespace Ashkal {
       std::vector<Type> m_buffer;
   };
 
+  /** Defines a Raster used for rendering frames. */
+  using FrameBuffer = Raster<Color>;
+
+  /** Defines a Raster used for building a depth buffer. */
+  using DepthBuffer = Raster<float>;
+
   template<typename T>
   Raster<T>::Raster(int width, int height)
     : m_width(width),

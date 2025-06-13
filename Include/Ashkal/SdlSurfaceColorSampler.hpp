@@ -1,7 +1,7 @@
 #ifndef ASHKAL_SDL_SURFACE_COLOR_SAMPLER_HPP
 #define ASHKAL_SDL_SURFACE_COLOR_SAMPLER_HPP
-#include <exception>
 #include <filesystem>
+#include <stdexcept>
 #include <SDL.h>
 #include "Ashkal/ColorSampler.hpp"
 

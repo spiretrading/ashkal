@@ -4,7 +4,6 @@
 #include <utility>
 #include <vector>
 #include <SDL.h>
-#include <SDL_ttf.h>
 #include <Windows.h>
 #include "Ashkal/Camera.hpp"
 #include "Ashkal/MeshLoader.hpp"
@@ -13,12 +12,10 @@
 #include "Ashkal/SdlSurfaceColorSampler.hpp"
 #include "Ashkal/ShadingSample.hpp"
 #include "Ashkal/SolidColorSampler.hpp"
+#include "Ashkal/TextRenderer.hpp"
 #include "Version.hpp"
 
 using namespace Ashkal;
-
-using FrameBuffer = Raster<Color>;
-using DepthBuffer = Raster<float>;
 
 std::pair<int, int> project_to_screen(
     const Point& point, int width, int height) {
@@ -387,102 +384,6 @@ std::unique_ptr<Scene> make_object_viewer(const std::filesystem::path& path) {
   scene->add(std::move(model));
   return scene;
 }
-
-class TextRenderer {
-public:
-    /**
-     * Constructs the TextRenderer with given font file and size.
-     * Initializes SDL_ttf and loads the font.
-     */
-    TextRenderer(const std::filesystem::path& fontPath, int fontSize) {
-        if (TTF_WasInit() == 0) {
-            if (TTF_Init() != 0)
-                throw std::runtime_error("TTF_Init failed");
-        }
-        font_ = TTF_OpenFont(fontPath.string().c_str(), fontSize);
-        if (!font_)
-            throw std::runtime_error("Failed to load font");
-        lineSkip_ = TTF_FontLineSkip(font_);
-    }
-
-    ~TextRenderer() {
-        if (font_) TTF_CloseFont(font_);
-    }
-
-    /**
-     * Renders the given text into the provided frame buffer at (x,y) with specified color.
-     * Origin (0,0) is top-left of the buffer. Supports '\n' for line breaks.
-     * frameBuffer is a vector<uint32_t> of size fbWidth*fbHeight in RGBA (little-endian).
-     */
-    void render(std::string_view text,
-                float x, float y,
-                Ashkal::Color color,
-                FrameBuffer& frameBuffer) {
-        float cursorX = x;
-        float cursorY = y;
-        size_t pos = 0;
-        while (pos < text.size()) {
-            size_t next = text.find('\n', pos);
-            std::string line(text.substr(pos, next - pos));
-            renderLineToBuffer(line,
-                               static_cast<int>(cursorX),
-                               static_cast<int>(cursorY),
-                               color,
-                               frameBuffer);
-            if (next == std::string::npos) break;
-            cursorY += float(lineSkip_);
-            cursorX = x;
-            pos = next + 1;
-        }
-    }
-
-private:
-    TTF_Font* font_{nullptr};
-    int lineSkip_{0};
-
-    void renderLineToBuffer(const std::string& line,
-                            int x, int y,
-                            Ashkal::Color color,
-                            FrameBuffer& frameBuffer) {
-        if (line.empty()) return;
-        SDL_Color sdlColor{color.get_red(), color.get_green(), color.get_blue(), color.get_alpha()};
-        SDL_Surface* surf = TTF_RenderText_Blended(font_, line.c_str(), sdlColor);
-        if (!surf) return;
-        if (SDL_LockSurface(surf) != 0) {
-            SDL_FreeSurface(surf);
-            return;
-        }
-        Uint32* pixels = static_cast<Uint32*>(surf->pixels);
-        SDL_PixelFormat* fmt = surf->format;
-        for (int row = 0; row < surf->h; ++row) {
-            for (int col = 0; col < surf->w; ++col) {
-                Uint32 pix = pixels[row * surf->w + col];
-                Uint8 sr, sg, sb, sa;
-                SDL_GetRGBA(pix, fmt, &sr, &sg, &sb, &sa);
-                if (sa == 0) continue;
-                int fbX = x + col;
-                int fbY = y + row;
-                if (fbX < 0 || fbX >= frameBuffer.get_width() || fbY < 0 ||
-                    fbY >= frameBuffer.get_height()) {
-                    continue;
-                }
-                uint32_t dst = frameBuffer(fbX, fbY).as_rgba();
-                Uint8 dr = dst & 0xFF;
-                Uint8 dg = (dst >> 8) & 0xFF;
-                Uint8 db = (dst >> 16) & 0xFF;
-                Uint8 da = (dst >> 24) & 0xFF;
-                float alpha = sa / 255.0f;
-                Uint8 outR = static_cast<Uint8>(sr * alpha + dr * (1 - alpha));
-                Uint8 outG = static_cast<Uint8>(sg * alpha + dg * (1 - alpha));
-                Uint8 outB = static_cast<Uint8>(sb * alpha + db * (1 - alpha));
-                Uint8 outA = static_cast<Uint8>(sa + da * (1 - alpha));
-                frameBuffer(fbX, fbY) = Color(outR, outG, outB, outA);
-            }
-        }
-        SDL_UnlockSurface(surf);
-        SDL_FreeSurface(surf);
-    }
-};
 
 int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
     LPSTR pCmdLine, int nCmdShow) {
