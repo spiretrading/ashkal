@@ -211,7 +211,7 @@ namespace Ashkal {
   }
 
   /**
-   * Transforms a point by a matrix  using homogeneous coordinates.
+   * Transforms a point by a matrix using homogeneous coordinates.
    * @param left The transformation matrix.
    * @param right The point to transform.
    * @return The transformed Point.
@@ -255,7 +255,7 @@ namespace Ashkal {
    */
   inline Vector operator *(const Matrix& left, const Vector& right) {
     auto result = Vector();
-    auto get = [&] (int x) {
+    auto get = [&] (auto x) {
       if(x == 0) {
         return right.m_x;
       } else if(x == 1) {
@@ -263,9 +263,9 @@ namespace Ashkal {
       } else if(x == 2) {
         return right.m_z;
       }
-      return 1.f;
+      return 0.f;
     };
-    auto set = [&] (int x, float v) {
+    auto set = [&] (auto x, auto v) {
       if(x == 0) {
         result.m_x = v;
       } else if(x == 1) {
@@ -274,9 +274,9 @@ namespace Ashkal {
         result.m_z = v;
       }
     };
-    for(auto y = 0; y != Matrix::HEIGHT; ++y) {
+    for(auto y = 0; y < Matrix::HEIGHT; ++y) {
       auto e = 0.f;
-      for(auto x = 0; x != Matrix::WIDTH; ++x) {
+      for(auto x = 0; x < Matrix::WIDTH; ++x) {
         e += left.get(x, y) * get(x);
       }
       set(y, e);
