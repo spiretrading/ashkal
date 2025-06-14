@@ -1,7 +1,6 @@
 #ifndef ASHKAL_VERTEX_TRIANGLE_HPP
 #define ASHKAL_VERTEX_TRIANGLE_HPP
 #include <ostream>
-#include <cstdint>
 
 namespace Ashkal {
 
@@ -12,13 +11,13 @@ namespace Ashkal {
   struct VertexTriangle {
 
     /** Index of the first vertex. */
-    std::uint16_t m_a;
+    int m_a;
 
     /** Index of the second vertex. */
-    std::uint16_t m_b;
+    int m_b;
 
     /** Index of the third vertex. */
-    std::uint16_t m_c;
+    int m_c;
   };
 
   inline std::ostream& operator <<(

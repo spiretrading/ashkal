@@ -34,7 +34,7 @@ namespace Ashkal {
     auto base_directory = path.parent_path();
     for(auto i = std::size_t(0); i < scene->mNumMeshes; ++i) {
       auto mesh = scene->mMeshes[i];
-      auto vertex_indices = std::vector<std::uint16_t>();
+      auto vertex_indices = std::vector<int>();
       for(auto j = std::size_t(0); j < mesh->mNumVertices; ++j) {
         auto& p = mesh->mVertices[j];
         auto position = Point(p.x, p.y, p.z);
@@ -53,8 +53,7 @@ namespace Ashkal {
           return TextureCoordinate(0, 0);
         }();
         vertices.push_back({position, uv, normal});
-        vertex_indices.push_back(
-          static_cast<std::uint16_t>(vertices.size() - 1));
+        vertex_indices.push_back(static_cast<int>(vertices.size() - 1));
       }
       auto triangles = std::vector<VertexTriangle>();
       for(auto j = std::size_t(0); j < mesh->mNumFaces; ++j) {
