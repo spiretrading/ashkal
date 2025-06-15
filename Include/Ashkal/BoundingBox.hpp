@@ -18,6 +18,13 @@ namespace Ashkal {
       /** Constructs a unit cube centered at the origin. */
       BoundingBox();
 
+      /**
+       * Constructs a BoundingBox along two corners.
+       * @param minimum The minimum corner.
+       * @param maximum The maximum corner.
+       */
+      BoundingBox(const Point& minimum, const Point& maximum);
+
       /** Returns the minimum (corner) point of the bounding box. */
       const Point& get_minimum() const;
 
@@ -35,6 +42,22 @@ namespace Ashkal {
       Point m_minimum;
       Point m_maximum;
   };
+
+  /**
+   * Computes the bounding box that encloses two input boxes.
+   * @param a The first bounding box.
+   * @param b The second bounding box.
+   * @return A BoundingBox that fully contains both input boxes.
+   */
+  inline BoundingBox merge(const BoundingBox& a, const BoundingBox& b) {
+    auto min_x = std::min(a.get_minimum().m_x, b.get_minimum().m_x);
+    auto min_y = std::min(a.get_minimum().m_y, b.get_minimum().m_y);
+    auto min_z = std::min(a.get_minimum().m_z, b.get_minimum().m_z);
+    auto max_x = std::max(a.get_maximum().m_x, b.get_maximum().m_x);
+    auto max_y = std::max(a.get_maximum().m_y, b.get_maximum().m_y);
+    auto max_z = std::max(a.get_maximum().m_z, b.get_maximum().m_z);
+    return BoundingBox(Point(min_x, min_y, min_z), Point(max_x, max_y, max_z));
+  }
 
   /**
    * Tests whether two bounding boxes overlap.
@@ -71,8 +94,11 @@ namespace Ashkal {
   }
 
   inline BoundingBox::BoundingBox()
-    : m_minimum(-0.5f, -0.5f, -0.5f),
-      m_maximum(0.5f, 0.5f, 0.5f) {}
+    : BoundingBox(Point(-0.5f, -0.5f, -0.5f), Point(0.5f, 0.5f, 0.5f)) {}
+
+  inline BoundingBox::BoundingBox(const Point& minimum, const Point& maximum)
+    : m_minimum(minimum),
+      m_maximum(maximum) {}
 
   const Point& BoundingBox::get_minimum() const {
     return m_minimum;

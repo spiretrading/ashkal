@@ -230,7 +230,7 @@ void render(const Model& model, const MeshNode& node, const Scene& scene,
     const Camera& camera, const Matrix& parent_transformation,
     FrameBuffer& frame_buffer, DepthBuffer& depth_buffer) {
   auto next_transformation =
-    parent_transformation * model.get_transformation().get_transformation(node);
+    parent_transformation * model.get_segment(node).get_transformation();
   if(node.get_type() == MeshNode::Type::CHUNK) {
     for(auto& child : node.as_chunk()) {
       render(model, child, scene, camera, next_transformation, frame_buffer,
@@ -344,9 +344,8 @@ std::unique_ptr<Scene> make_scene(const std::vector<std::vector<int>>& map) {
     for(auto x = 0; x < int(map[y].size()); ++x) {
       if(map[y][x] == 1) {
         auto model = std::make_unique<Model>(make_cube(wall_texture));
-        model->get_transformation().apply(
-          translate(Vector(2 * x, 1, -2 * (depth - y))),
-          model->get_mesh().m_root);
+        model->get_segment(model->get_mesh().m_root).apply(
+          translate(Vector(2 * x, 1, -2 * (depth - y))));
         scene->add(std::move(model));
       }
     }
@@ -354,21 +353,20 @@ std::unique_ptr<Scene> make_scene(const std::vector<std::vector<int>>& map) {
   auto ceiling_texture =
     std::make_shared<SolidColorSampler>(Color(178, 34, 34, 255));
   auto ceiling = std::make_unique<Model>(make_cube(ceiling_texture));
-  ceiling->get_transformation().apply(
-    scale_y(.001), ceiling->get_mesh().m_root);
-  ceiling->get_transformation().apply(scale_x(8), ceiling->get_mesh().m_root);
-  ceiling->get_transformation().apply(scale_z(5), ceiling->get_mesh().m_root);
-  ceiling->get_transformation().apply(translate(Vector(7, 2, -6)),
-    ceiling->get_mesh().m_root);
+  auto& ceiling_segment = ceiling->get_segment(ceiling->get_mesh().m_root);
+  ceiling_segment.apply(scale_y(.001));
+  ceiling_segment.apply(scale_x(8));
+  ceiling_segment.apply(scale_z(5));
+  ceiling_segment.apply(translate(Vector(7, 2, -6)));
   scene->add(std::move(ceiling));
   auto floor_texture =
     std::make_shared<SolidColorSampler>(Color(116, 116, 116, 255));
   auto floor = std::make_unique<Model>(make_cube(floor_texture));
-  floor->get_transformation().apply(scale_y(.001), floor->get_mesh().m_root);
-  floor->get_transformation().apply(scale_x(8), floor->get_mesh().m_root);
-  floor->get_transformation().apply(scale_z(5), floor->get_mesh().m_root);
-  floor->get_transformation().apply(translate(Vector(7, -.1, -6)),
-    floor->get_mesh().m_root);
+  auto& floor_segment = floor->get_segment(floor->get_mesh().m_root);
+  floor_segment.apply(scale_y(.001));
+  floor_segment.apply(scale_x(8));
+  floor_segment.apply(scale_z(5));
+  floor_segment.apply(translate(Vector(7, -.1, -6)));
   scene->add(std::move(floor));
   return scene;
 }

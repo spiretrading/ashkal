@@ -30,7 +30,6 @@ namespace Ashkal {
        */
       explicit MeshNode(Fragment fragment);
 
-
       /**
        * Construct an internal node holding a collection of children.
        * @param children The list of MeshNode instances to form this chunk.
