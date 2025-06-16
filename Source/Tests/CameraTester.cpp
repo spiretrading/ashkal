@@ -1,5 +1,4 @@
 #include <iostream>
-#include <numbers>
 #include <stdexcept>
 #include <doctest/doctest.h>
 #include "Ashkal/Camera.hpp"
@@ -8,7 +7,7 @@ using namespace Ashkal;
 
 TEST_SUITE("Camera") {
   TEST_CASE("default_constructor") {
-    auto camera = Camera();
+    auto camera = Camera(1);
     CHECK(camera.get_position() == Point(0, 0, 0));
     CHECK(camera.get_direction() == Vector(0, 0, 1));
     CHECK(camera.get_orientation() == Vector(0, 1, 0));
@@ -19,7 +18,8 @@ TEST_SUITE("Camera") {
     auto position = Point(1, 2, 3);
     auto direction = Vector(0, 0, 1);
     auto orientation = Vector(0, 1, 0);
-    auto camera = Camera(position, direction, orientation);
+    auto camera =
+      Camera(position, direction, orientation, 1, std::numbers::pi / 2);
     CHECK(camera.get_position() == position);
     CHECK(camera.get_direction() == direction);
     CHECK(camera.get_orientation() == orientation);
@@ -27,7 +27,7 @@ TEST_SUITE("Camera") {
   }
 
   TEST_CASE("apply") {
-    auto camera = Camera();
+    auto camera = Camera(1);
     auto transform = translate(Vector(1, 1, 1));
     camera.apply(transform);
     CHECK(camera.get_position() == Point(1, 1, 1));
@@ -37,7 +37,7 @@ TEST_SUITE("Camera") {
   }
 
   TEST_CASE("movement") {
-    auto camera = Camera();
+    auto camera = Camera(1);
     auto distance = 5.f;
     SUBCASE("move_forward") {
       move_forward(camera, distance);
@@ -58,7 +58,7 @@ TEST_SUITE("Camera") {
   }
 
   TEST_CASE("tilt") {
-    auto camera = Camera();
+    auto camera = Camera(1);
     SUBCASE("45-degree tilt along X-axis") {
       auto tilt_x = std::numbers::pi_v<float> / 4.f;
       tilt(camera, tilt_x, 0.f);
@@ -104,7 +104,7 @@ TEST_SUITE("Camera") {
   }
 
   TEST_CASE("rotation") {
-    auto camera = Camera();
+    auto camera = Camera(1);
     auto rotation_matrix = yaw(std::numbers::pi_v<float> / 2.f) *
       pitch(std::numbers::pi_v<float> / 4.f);
     camera.apply(rotation_matrix);

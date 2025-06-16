@@ -7,6 +7,7 @@
 #include "Ashkal/Camera.hpp"
 #include "Ashkal/MeshLoader.hpp"
 #include "Ashkal/Raster.hpp"
+#include "Ashkal/Renderer.hpp"
 #include "Ashkal/Scene.hpp"
 #include "Ashkal/SdlSurfaceColorSampler.hpp"
 #include "Ashkal/ShadingSample.hpp"
@@ -16,25 +17,10 @@
 
 using namespace Ashkal;
 
-std::pair<int, int> project_to_screen(
-    const Point& point, int width, int height) {
-  const auto THRESHOLD = 1e-5f;
-  auto camera = Point(point.m_x, point.m_y, point.m_z + Camera::NEAR_PLANE_Z);
-  if(camera.m_z >= 0) {
-    camera.m_z = -THRESHOLD;
-  }
-  auto perspective = 1 / -camera.m_z;
-  auto normalized_x = (height * camera.m_x * perspective) / width;
-  auto normalized_y = camera.m_y * perspective;
-  auto fx = (normalized_x + 1) * 0.5f * width;
-  auto fy = (1 - (normalized_y + 1) * 0.5f) * height;
-  return std::pair(int(fx), int(fy));
-}
-
-float compute_edge(const std::pair<int, int>& p1,
-    const std::pair<int, int>& p2, const std::pair<float, float>& p) {
-  return (p2.first - p1.first) * (p.second - p1.second) -
-    (p2.second - p1.second) * (p.first - p1.first);
+float compute_edge(const ScreenCoordinate& p1,
+    const ScreenCoordinate& p2, const std::pair<float, float>& p) {
+  return (p2.m_x - p1.m_x) * (p.second - p1.m_y) -
+    (p2.m_y - p1.m_y) * (p.first - p1.m_x);
 }
 
 struct ShadedVertex {
@@ -44,22 +30,22 @@ struct ShadedVertex {
 };
 
 void render(const ShadedVertex& a, const ShadedVertex& b, const ShadedVertex& c,
-    const Material& material, FrameBuffer& frame_buffer,
+    const Material& material, const Camera& camera, FrameBuffer& frame_buffer,
     DepthBuffer& depth_buffer) {
   auto screen_a = project_to_screen(
-    a.m_position, frame_buffer.get_width(), frame_buffer.get_height());
+    a.m_position, camera, frame_buffer.get_width(), frame_buffer.get_height());
   auto screen_b = project_to_screen(
-    b.m_position, frame_buffer.get_width(), frame_buffer.get_height());
+    b.m_position, camera, frame_buffer.get_width(), frame_buffer.get_height());
   auto screen_c = project_to_screen(
-    c.m_position, frame_buffer.get_width(), frame_buffer.get_height());
+    c.m_position, camera, frame_buffer.get_width(), frame_buffer.get_height());
   auto min_x =
-    std::max(0, std::min({screen_a.first, screen_b.first, screen_c.first}));
+    std::max(0, std::min({screen_a.m_x, screen_b.m_x, screen_c.m_x}));
   auto max_x = std::min(frame_buffer.get_width() - 1,
-    std::max({screen_a.first, screen_b.first, screen_c.first}));
+    std::max({screen_a.m_x, screen_b.m_x, screen_c.m_x}));
   auto min_y =
-    std::max(0, std::min({screen_a.second, screen_b.second, screen_c.second}));
+    std::max(0, std::min({screen_a.m_y, screen_b.m_y, screen_c.m_y}));
   auto max_y = std::min(frame_buffer.get_height() - 1,
-    std::max({screen_a.second, screen_b.second, screen_c.second}));
+    std::max({screen_a.m_y, screen_b.m_y, screen_c.m_y}));
   auto inv_z_a = -1 / (a.m_position.m_z - 1);
   auto inv_z_b = -1 / (b.m_position.m_z - 1);
   auto inv_z_c = -1 / (c.m_position.m_z - 1);
@@ -198,8 +184,8 @@ void render(const Model& model, const Fragment& fragment,
           transform_normal(transformation, c.m_normal)));
   if(is_in_front(shaded_a.m_position) && is_in_front(shaded_b.m_position) &&
       is_in_front(shaded_c.m_position)) {
-    render(shaded_a, shaded_b, shaded_c, fragment.get_material(), frame_buffer,
-      depth_buffer);
+    render(shaded_a, shaded_b, shaded_c, fragment.get_material(), camera,
+      frame_buffer, depth_buffer);
     return;
   }
   auto clipped_vertices = std::array<const ShadedVertex*, 4>();
@@ -210,10 +196,10 @@ void render(const Model& model, const Fragment& fragment,
     return;
   }
   render(*clipped_vertices[0], *clipped_vertices[1], *clipped_vertices[2],
-    fragment.get_material(), frame_buffer, depth_buffer);
+    fragment.get_material(), camera, frame_buffer, depth_buffer);
   if(clipped_count == 4) {
     render(*clipped_vertices[0], *clipped_vertices[2], *clipped_vertices[3],
-      fragment.get_material(), frame_buffer, depth_buffer);
+      fragment.get_material(), camera, frame_buffer, depth_buffer);
   }
 }
 
@@ -251,7 +237,13 @@ void render(const Model& model, const Scene& scene, const Camera& camera,
 void render(const Scene& scene, const Camera& camera, FrameBuffer& frame_buffer,
     DepthBuffer& depth_buffer) {
   for(auto i = 0; i != scene.get_model_count(); ++i) {
-    render(scene.get_model(i), scene, camera, frame_buffer, depth_buffer);
+    auto& model = scene.get_model(i);
+    auto& segment = model.get_segment(model.get_mesh().m_root);
+    auto bounding_box = segment.get_bounding_box();
+    bounding_box.apply(segment.get_transformation());
+//    if(intersects(camera.get_frustum(), bounding_box)) {
+      render(model, scene, camera, frame_buffer, depth_buffer);
+//    }
   }
 }
 
@@ -335,11 +327,13 @@ auto level_map = std::vector<std::vector<int>> {
 
 std::unique_ptr<Scene> make_scene(const std::vector<std::vector<int>>& map) {
   auto scene = std::make_unique<Scene>();
-  scene->set(AmbientLight(Color(255, 255, 255, 255), .7));
-  scene->set(DirectionalLight(
-    normalize(Vector(.2, -1, 0.3)), Color(255, 255, 240, 255), .8));
+  scene->set(AmbientLight(Color(255, 255, 255), .7));
+  scene->set(
+    DirectionalLight(normalize(Vector(.2, -1, 0.3)), Color(255, 255, 240), .8));
   auto depth = int(map.size());
-  auto wall_texture = load_sampler("texture1.bmp");
+//  auto wall_texture = load_sampler("texture1.bmp");
+  auto wall_texture =
+    std::make_shared<SolidColorSampler>(Color(255, 0, 0));
   for(auto y = 0; y < depth; ++y) {
     for(auto x = 0; x < int(map[y].size()); ++x) {
       if(map[y][x] == 1) {
@@ -351,7 +345,7 @@ std::unique_ptr<Scene> make_scene(const std::vector<std::vector<int>>& map) {
     }
   }
   auto ceiling_texture =
-    std::make_shared<SolidColorSampler>(Color(178, 34, 34, 255));
+    std::make_shared<SolidColorSampler>(Color(178, 34, 34));
   auto ceiling = std::make_unique<Model>(make_cube(ceiling_texture));
   auto& ceiling_segment = ceiling->get_segment(ceiling->get_mesh().m_root);
   ceiling_segment.apply(scale_y(.001));
@@ -360,7 +354,7 @@ std::unique_ptr<Scene> make_scene(const std::vector<std::vector<int>>& map) {
   ceiling_segment.apply(translate(Vector(7, 2, -6)));
   scene->add(std::move(ceiling));
   auto floor_texture =
-    std::make_shared<SolidColorSampler>(Color(116, 116, 116, 255));
+    std::make_shared<SolidColorSampler>(Color(116, 116, 116));
   auto floor = std::make_unique<Model>(make_cube(floor_texture));
   auto& floor_segment = floor->get_segment(floor->get_mesh().m_root);
   floor_segment.apply(scale_y(.001));
@@ -379,6 +373,18 @@ std::unique_ptr<Scene> make_object_viewer(const std::filesystem::path& path) {
   auto mesh = load_mesh(path);
   auto model = std::make_unique<Model>(std::move(mesh));
   scene->add(std::move(model));
+  return scene;
+}
+
+std::unique_ptr<Scene> make_simple_scene() {
+  auto scene = std::make_unique<Scene>();
+  scene->set(AmbientLight(Color(255, 255, 255, 255), 2));
+  scene->set(DirectionalLight(
+    normalize(Vector(.2, -1, 0.3)), Color(255, 255, 240, 255), 2.5));
+  auto red_sampler = std::make_shared<SolidColorSampler>(Color(255, 0, 0, 255));
+  auto cube_mesh = make_cube(red_sampler);
+  auto cube_model = std::make_unique<Model>(std::move(cube_mesh));
+  scene->add(std::move(cube_model));
   return scene;
 }
 
@@ -418,13 +424,21 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
   auto text_renderer = TextRenderer("C:\\Windows\\Fonts\\arial.ttf", 12);
   auto frame_buffer = FrameBuffer(WIDTH, HEIGHT);
   auto depth_buffer = DepthBuffer(WIDTH, HEIGHT);
+/*
+  auto scene = make_simple_scene();
+  auto camera = Camera(Point(0, 0, -5), Vector(0, 0, 1), Vector(0, 1, 0),
+    WIDTH / float(HEIGHT), std::numbers::pi_v<float> / 2);
+*/
   auto depth = int(level_map.size());
   auto cx = 3;
   auto cy = 2;
-  auto camera = Camera(
-    Point(2 * cx, 1, -2 * (depth - cy)), Vector(0, 0, -1), Vector(0, 1, 0));
-//  auto scene = make_scene(level_map);
-  auto scene = make_object_viewer(std::filesystem::path(pCmdLine).string());
+  auto hfov = std::numbers::pi / 2;
+  auto aspect = WIDTH / static_cast<float>(HEIGHT);
+  auto fov = 2.0f * std::atan( std::tan(hfov * 0.5f) / aspect);
+  auto camera = Camera(Point(2 * cx, 1, -2 * (depth - cy)), Vector(0, 0, -1),
+    Vector(0, 1, 0), WIDTH / static_cast<float>(HEIGHT), fov);
+  auto scene = make_scene(level_map);
+//  auto scene = make_object_viewer(std::filesystem::path(pCmdLine).string());
   auto is_running = true;
   auto event = SDL_Event();
   auto window_id = SDL_GetWindowID(window);

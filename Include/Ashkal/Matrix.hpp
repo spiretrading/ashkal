@@ -359,8 +359,8 @@ namespace Ashkal {
   inline Matrix roll(float radians) {
     auto transform = Matrix::IDENTITY();
     transform.set(0, 0, std::cos(radians));
-    transform.set(1, 0, -std::sin(radians));
-    transform.set(0, 1, std::sin(radians));
+    transform.set(0, 1, -std::sin(radians));
+    transform.set(1, 0, std::sin(radians));
     transform.set(1, 1, std::cos(radians));
     return transform;
   }

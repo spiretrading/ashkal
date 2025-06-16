@@ -100,15 +100,15 @@ namespace Ashkal {
     : m_minimum(minimum),
       m_maximum(maximum) {}
 
-  const Point& BoundingBox::get_minimum() const {
+  inline const Point& BoundingBox::get_minimum() const {
     return m_minimum;
   }
 
-  const Point& BoundingBox::get_maximum() const {
+  inline const Point& BoundingBox::get_maximum() const {
     return m_maximum;
   }
 
-  void BoundingBox::apply(const Matrix& transformation) {
+  inline void BoundingBox::apply(const Matrix& transformation) {
     auto center = Point((m_minimum.m_x + m_maximum.m_x) * 0.5f,
       (m_minimum.m_y + m_maximum.m_y) * 0.5f,
       (m_minimum.m_z + m_maximum.m_z) * 0.5f);
