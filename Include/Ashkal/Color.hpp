@@ -64,6 +64,8 @@ namespace Ashkal {
       /** Returns the packed 0xRRGGBBAA value. */
       std::uint32_t as_rgba() const noexcept;
 
+      bool operator ==(const Color&) const = default;
+
     private:
       std::uint32_t m_rgba;
   };
@@ -78,6 +80,29 @@ namespace Ashkal {
     return Color(std::min<int>(left.get_red() + right.get_red(), 255),
       std::min<int>(left.get_green() + right.get_green(), 255),
       std::min<int>(left.get_blue() + right.get_blue(), 255), left.get_alpha());
+  }
+
+  /**
+   * Linearly interpolates between two Color objects.
+   * @param left The color corresponding to t = 0.
+   * @param right The color corresponding to t = 1.
+   * @param t Interpolation parameter in the range [0, 1].
+   * @return The interpolated Color.
+   */
+  inline Color lerp(Color left, Color right, float t) {
+    auto red = static_cast<std::uint8_t>(std::lerp(
+      static_cast<float>(left.get_red()),
+      static_cast<float>(right.get_red()), t));
+    auto green = static_cast<std::uint8_t>(std::lerp(
+      static_cast<float>(left.get_green()),
+      static_cast<float>(right.get_green()), t));
+    auto blue = static_cast<std::uint8_t>(std::lerp(
+      static_cast<float>(left.get_blue()),
+      static_cast<float>(right.get_blue()), t));
+    auto alpha = static_cast<std::uint8_t>(std::lerp(
+      static_cast<float>(left.get_alpha()),
+      static_cast<float>(right.get_alpha()), t));
+    return Color(red, green, blue, alpha);
   }
 
   inline std::ostream& operator <<(std::ostream& out, Color color) {

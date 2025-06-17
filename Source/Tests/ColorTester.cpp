@@ -53,4 +53,38 @@ TEST_SUITE("Color") {
     CHECK(sat.get_blue() == 255);
     CHECK(sat.get_alpha() == 50);
   }
+
+  TEST_CASE("lerp_left") {
+    auto left = Color(10, 20, 30, 40);
+    auto right = Color(200, 210, 220, 230);
+    auto result = lerp(left, right, 0);
+    CHECK(result == left);
+  }
+
+  TEST_CASE("lerp_right") {
+    auto left = Color(10, 20, 30, 40);
+    auto right = Color(200, 210, 220, 230);
+    auto result = lerp(left, right, 1);
+    CHECK(result == right);
+  }
+
+  TEST_CASE("lerp_middle") {
+    auto left = Color(0, 0, 0, 0);
+    auto right = Color(255, 255, 255, 255);
+    auto result = lerp(left, right, 0.5f);
+    CHECK(result == Color(127, 127, 127, 127));
+  }
+
+  TEST_CASE("lerp") {
+    auto left = Color(100, 150, 200, 50);
+    auto right = Color(200, 100, 50, 150);
+    auto t = 0.25f;
+    auto result = lerp(left, right, t);
+    auto expected_color = Color(
+      static_cast<uint8_t>(std::lerp(100.0f, 200.0f, t)),
+      static_cast<uint8_t>(std::lerp(150.0f, 100.0f, t)),
+      static_cast<uint8_t>(std::lerp(200.0f,  50.0f, t)),
+      static_cast<uint8_t>(std::lerp( 50.0f, 150.0f, t)));
+    CHECK(result == expected_color);
+  }
 }

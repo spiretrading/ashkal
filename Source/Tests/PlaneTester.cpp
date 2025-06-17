@@ -71,4 +71,27 @@ TEST_SUITE("Plane") {
     CHECK(plane.m_normal.m_z == doctest::Approx(-d));
     CHECK(plane.m_d == doctest::Approx(d));
   }
+
+  TEST_CASE("is_in_front_horizontal_plane") {
+    auto plane = Plane(Vector(0, 0, 1), 0);
+    CHECK(is_in_front(plane, Point(0, 0,  1)));
+    CHECK(is_in_front(plane, Point(1, 2,  0)));
+    CHECK_FALSE(is_in_front(plane, Point(0, 0, -1)));
+  }
+
+  TEST_CASE("is_in_front_vertical_plane") {
+    auto plane = Plane(Vector(1, 0, 0), -2);
+    CHECK(is_in_front(plane, Point(2, 0, 0)));
+    CHECK(is_in_front(plane, Point(3, 5, -1)));
+    CHECK_FALSE(is_in_front(plane, Point(1.9f, 0, 0)));
+  }
+
+  TEST_CASE("is_in_front_arbitrary") {
+    auto normal = normalize(Vector(1, 1, 1));
+    auto d = -dot(normal, Vector(Point(1, 0, 0)));
+    auto plane = Plane(normal, d);
+    CHECK(is_in_front(plane, Point(1, 0, 0)));
+    CHECK(is_in_front(plane, Point(0.7f, 0.7f, 0.7f)));
+    CHECK_FALSE(is_in_front(plane, Point(0, 0, 0)));
+  }
 }
