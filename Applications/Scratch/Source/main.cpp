@@ -18,9 +18,9 @@
 using namespace Ashkal;
 
 float compute_edge(const ScreenCoordinate& p1,
-    const ScreenCoordinate& p2, const std::pair<float, float>& p) {
-  return (p2.m_x - p1.m_x) * (p.second - p1.m_y) -
-    (p2.m_y - p1.m_y) * (p.first - p1.m_x);
+    const ScreenCoordinate& p2, const FloatScreenCoordinate& p) {
+  return (p2.m_x - p1.m_x) * (p.m_y - p1.m_y) -
+    (p2.m_y - p1.m_y) * (p.m_x - p1.m_x);
 }
 
 struct ShadedVertex {
@@ -57,7 +57,7 @@ void render(const ShadedVertex& a, const ShadedVertex& b, const ShadedVertex& c,
   auto voz_c = c.m_uv.m_v * inv_z_c;
   for(auto y = min_y; y <= max_y; ++y) {
     for(auto x = min_x; x <= max_x; ++x) {
-      auto point = std::pair(x + 0.5f, y + 0.5f);
+      auto point = FloatScreenCoordinate(x + 0.5f, y + 0.5f);
       auto w0 = compute_edge(screen_b, screen_c, point);
       auto w1 = compute_edge(screen_c, screen_a, point);
       auto w2 = compute_edge(screen_a, screen_b, point);
@@ -67,7 +67,7 @@ void render(const ShadedVertex& a, const ShadedVertex& b, const ShadedVertex& c,
         auto gamma = w2 / (w0 + w1 + w2);
         auto inv_z = alpha * inv_z_a + beta * inv_z_b + gamma * inv_z_c;
         auto depth = 1 / inv_z;
-        if(depth < depth_buffer(x, y)) {
+        if(depth <= depth_buffer(x, y)) {
           depth_buffer(x, y) = depth;
           auto uv = TextureCoordinate(
             (alpha * uoz_a + beta * uoz_b + gamma * uoz_c) / inv_z,
@@ -95,13 +95,12 @@ void render(const ShadedVertex& a, const ShadedVertex& b, const ShadedVertex& c,
 }
 
 float compute_interpolation_parameter(const Point& a, const Point& b) {
-  return (a.m_z + Camera::NEAR_PLANE_Z) / (a.m_z - b.m_z);
+  return (Camera::NEAR_PLANE_Z - a.m_z) / (b.m_z - a.m_z);
 }
 
 Point intersect_near_plane(const Point& a, const Point& b, float t) {
-  const auto THRESHOLD = 1e-5f;
   return Point(a.m_x + t * (b.m_x - a.m_x), a.m_y + t * (b.m_y - a.m_y),
-    -Camera::NEAR_PLANE_Z - THRESHOLD);
+    Camera::NEAR_PLANE_Z);
 }
 
 void process_edge(const ShadedVertex& a, const ShadedVertex& b,
@@ -432,11 +431,9 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
   auto depth = int(level_map.size());
   auto cx = 3;
   auto cy = 2;
-  auto hfov = std::numbers::pi / 2;
   auto aspect = WIDTH / static_cast<float>(HEIGHT);
-  auto fov = 2.0f * std::atan( std::tan(hfov * 0.5f) / aspect);
   auto camera = Camera(Point(2 * cx, 1, -2 * (depth - cy)), Vector(0, 0, -1),
-    Vector(0, 1, 0), WIDTH / static_cast<float>(HEIGHT), fov);
+    Vector(0, 1, 0), WIDTH / static_cast<float>(HEIGHT));
   auto scene = make_scene(level_map);
 //  auto scene = make_object_viewer(std::filesystem::path(pCmdLine).string());
   auto is_running = true;

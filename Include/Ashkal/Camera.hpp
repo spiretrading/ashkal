@@ -1,5 +1,6 @@
 #ifndef ASHKAL_CAMERA_HPP
 #define ASHKAL_CAMERA_HPP
+#include <cmath>
 #include <numbers>
 #include <ostream>
 #include "Ashkal/Frustum.hpp"
@@ -28,6 +29,13 @@ namespace Ashkal {
 
       /**
        * Constructs a Camera at a given position, with a given direction and
+       * orientation, aspect ratio and a 90 degree field of view.
+       */
+      Camera(Point position, Vector direction, Vector orientation,
+        float aspect_ratio);
+
+      /**
+       * Constructs a Camera at a given position, with a given direction and
        * orientation, aspect ratio and field of view.
        */
       Camera(Point position, Vector direction, Vector orientation,
@@ -38,6 +46,12 @@ namespace Ashkal {
 
       /** Returns the field of view (vertical). */
       float get_field_of_view() const;
+
+      /** Returns the focal length. */
+      float get_focal_length() const;
+
+      /** Returns the horizontal focal length. */
+      float get_horizontal_focal_length() const;
 
       /** Returns the view to world matrix. */
       const Matrix& get_view_to_world() const;
@@ -72,6 +86,8 @@ namespace Ashkal {
       static const auto H_INDEX = 3;
       float m_aspect_ratio;
       float m_field_of_view;
+      float m_focal_length;
+      float m_horizontal_focal_length;
       Matrix m_view_to_world;
       Frustum m_frustum;
   };
@@ -120,7 +136,7 @@ namespace Ashkal {
 
   /** Tests if a point is in front of the camera. */
   inline bool is_in_front(const Point& point) {
-    return point.m_z < -Camera::NEAR_PLANE_Z;
+    return point.m_z <= Camera::NEAR_PLANE_Z;
   }
 
   /** Transforms a point from the world space to camera space. */
@@ -138,16 +154,19 @@ namespace Ashkal {
   }
 
   inline Camera::Camera(float aspect_ratio)
-      : m_aspect_ratio(aspect_ratio),
-        m_field_of_view(std::numbers::pi_v<float> / 2),
-        m_view_to_world(Matrix::IDENTITY()) {
-    m_frustum.update(*this);
-  }
+    : Camera(Point(0, 0, 0), Vector(0, 0, 1), Vector(0, 1, 0), aspect_ratio) {}
+
+  inline Camera::Camera(
+    Point position, Vector direction, Vector orientation, float aspect_ratio)
+    : Camera(position, direction, orientation, aspect_ratio,
+        std::numbers::pi_v<float> / 2) {}
 
   inline Camera::Camera(Point position, Vector direction, Vector orientation,
       float aspect_ratio, float field_of_view)
       : m_aspect_ratio(aspect_ratio),
-        m_field_of_view(field_of_view) {
+        m_field_of_view(field_of_view),
+        m_focal_length(1 / std::tan(0.5f * m_field_of_view)),
+        m_horizontal_focal_length(m_focal_length / m_aspect_ratio) {
     m_view_to_world.set(POSITION_COLUMN, X_INDEX, position.m_x);
     m_view_to_world.set(POSITION_COLUMN, Y_INDEX, position.m_y);
     m_view_to_world.set(POSITION_COLUMN, Z_INDEX, position.m_z);
@@ -175,6 +194,14 @@ namespace Ashkal {
 
   inline float Camera::get_field_of_view() const {
     return m_field_of_view;
+  }
+
+  inline float Camera::get_focal_length() const {
+    return m_focal_length;
+  }
+
+  inline float Camera::get_horizontal_focal_length() const {
+    return m_horizontal_focal_length;
   }
 
   inline const Matrix& Camera::get_view_to_world() const {
@@ -215,42 +242,48 @@ namespace Ashkal {
   }
 
   inline void Frustum::update(const Camera& camera) {
-    auto eye = camera.get_position();
-    auto forward = camera.get_direction();
-    auto right = camera.get_right();
-    auto up = camera.get_orientation();
-    auto nearDist = -Camera::NEAR_PLANE_Z;
-    auto farDist  = -Camera::FAR_PLANE_Z;
-    auto fovY     = camera.get_field_of_view();
-    auto aspect   = camera.get_aspect_ratio();
-    auto nc = eye + nearDist * forward;
-    auto fc = eye + farDist * forward;
-    auto tanHalfFov = std::tan(fovY * 0.5f);
-    auto hNear = tanHalfFov * nearDist;
-    auto wNear = hNear * aspect;
-    auto hFar  = tanHalfFov * farDist;
-    auto wFar  = hFar * aspect;
-    auto ntl = nc + hNear * up - wNear * right;
-    auto ntr = nc + hNear * up + wNear * right;
-    auto nbl = nc - hNear * up - wNear * right;
-    auto nbr = nc - hNear * up + wNear * right;
-    auto ftl = fc + hFar * up - wFar * right;
-    auto ftr = fc + hFar * up + wFar * right;
-    auto fbl = fc - hFar * up - wFar * right;
-    auto fbr = fc - hFar * up + wFar * right;
-    auto makePlane = [] (const Point& a, const Point& b, const Point& c) {
-      auto u = b - a;
-      auto v = c - a;
-      auto n = normalize(cross(v, u));
-      auto d = -dot(n, Vector(a));
-      return Plane(n, d);
-    };
-    m_planes[static_cast<std::size_t>(ClippingPlane::LEFT)]   = makePlane(eye, nbl, ntl);
-    m_planes[static_cast<std::size_t>(ClippingPlane::RIGHT)]  = makePlane(eye, ntr, nbr);
-    m_planes[static_cast<std::size_t>(ClippingPlane::BOTTOM)] = makePlane(eye, nbr, nbl);
-    m_planes[static_cast<std::size_t>(ClippingPlane::TOP)]    = makePlane(eye, ntl, ntr);
-    m_planes[static_cast<std::size_t>(ClippingPlane::NEAR)]   = makePlane(ntl, ntr, nbr);
-    m_planes[static_cast<std::size_t>(ClippingPlane::FAR)]    = makePlane(ftr, ftl, fbl);
+    auto tan_half_field_of_view = std::tan(camera.get_field_of_view() * 0.5f);
+    auto near_plane_center =
+      camera.get_position() + -Camera::NEAR_PLANE_Z * camera.get_direction();
+    auto near_plane_half_height =
+      tan_half_field_of_view * -Camera::NEAR_PLANE_Z;
+    auto near_plane_half_width =
+      camera.get_aspect_ratio() * near_plane_half_height;
+    auto near_plane_top_left = near_plane_center +
+      near_plane_half_height * camera.get_orientation() -
+      near_plane_half_width * camera.get_right();
+    auto near_plane_top_right =
+      near_plane_top_left + 2 * near_plane_half_width * camera.get_right();
+    auto near_plane_bottom_left = near_plane_top_left -
+      2 * near_plane_half_height * camera.get_orientation();
+    auto near_plane_bottom_right =
+      near_plane_bottom_left + 2 * near_plane_half_width * camera.get_right();
+    auto far_plane_center =
+      camera.get_position() + -Camera::FAR_PLANE_Z * camera.get_direction();
+    auto far_plane_half_height = tan_half_field_of_view * -Camera::FAR_PLANE_Z;
+    auto far_plane_half_width =
+      camera.get_aspect_ratio() * far_plane_half_height;
+    auto far_plane_top_left = far_plane_center +
+      far_plane_half_height * camera.get_orientation() -
+      far_plane_half_width * camera.get_right();
+    auto far_plane_top_right = 
+      far_plane_top_left + 2 * far_plane_half_width * camera.get_right();
+    auto far_plane_bottom_left =
+      far_plane_top_left - 2 * far_plane_half_height * camera.get_orientation();
+    auto far_plane_bottom_right =
+      far_plane_bottom_left + 2 * far_plane_half_width * camera.get_right();
+    m_planes[static_cast<std::size_t>(ClippingPlane::LEFT)] = make_plane(
+      camera.get_position(), near_plane_bottom_left, near_plane_top_left);
+    m_planes[static_cast<std::size_t>(ClippingPlane::RIGHT)] = make_plane(
+      camera.get_position(), near_plane_top_right, near_plane_bottom_right);
+    m_planes[static_cast<std::size_t>(ClippingPlane::BOTTOM)] = make_plane(
+      camera.get_position(), near_plane_bottom_right, near_plane_bottom_left);
+    m_planes[static_cast<std::size_t>(ClippingPlane::TOP)] = make_plane(
+      camera.get_position(), near_plane_top_left, near_plane_top_right);
+    m_planes[static_cast<std::size_t>(ClippingPlane::NEAR)] = make_plane(
+      near_plane_top_left, near_plane_top_right, near_plane_bottom_right);
+    m_planes[static_cast<std::size_t>(ClippingPlane::FAR)] = make_plane(
+      far_plane_top_right, far_plane_top_left, far_plane_bottom_left);
   }
 }
 
