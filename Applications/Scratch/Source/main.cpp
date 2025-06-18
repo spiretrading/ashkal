@@ -442,11 +442,10 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
   auto text_renderer = TextRenderer("C:\\Windows\\Fonts\\arial.ttf", 12);
   auto frame_buffer = FrameBuffer(WIDTH, HEIGHT);
   auto depth_buffer = DepthBuffer(WIDTH, HEIGHT);
-/*
   auto scene = make_simple_scene();
   auto camera = Camera(Point(0, 0, -5), Vector(0, 0, 1), Vector(0, 1, 0),
     WIDTH / float(HEIGHT), std::numbers::pi_v<float> / 2);
-*/
+/*
   auto depth = int(level_map.size());
   auto cx = 3;
   auto cy = 2;
@@ -455,6 +454,7 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
     Vector(0, 1, 0), WIDTH / static_cast<float>(HEIGHT));
   auto scene = make_scene(level_map);
 //  auto scene = make_object_viewer(std::filesystem::path(pCmdLine).string());
+*/
   auto is_running = true;
   auto event = SDL_Event();
   auto window_id = SDL_GetWindowID(window);
