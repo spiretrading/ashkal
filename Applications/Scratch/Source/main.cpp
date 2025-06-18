@@ -94,67 +94,66 @@ void render(const ShadedVertex& a, const ShadedVertex& b, const ShadedVertex& c,
   }
 }
 
-float intersect_t(const Plane& plane, const Point& a, const Point& b) {
-  auto distance_a = distance(plane, a);
-  auto distance_b = distance(plane, b);
-  return distance_a / (distance_a - distance_b);
-}
-
-ShadedVertex lerp(const ShadedVertex& a, const ShadedVertex& b, float t) {
-  auto result = ShadedVertex();
-  result.m_position = Point(std::lerp(a.m_position.m_x, b.m_position.m_x, t),
-    std::lerp(a.m_position.m_y, b.m_position.m_y, t),
-    std::lerp(a.m_position.m_z, b.m_position.m_z, t));
-  result.m_uv = TextureCoordinate(std::lerp(a.m_uv.m_u, b.m_uv.m_u, t),
-    std::lerp(a.m_uv.m_v, b.m_uv.m_v, t));
+ShadedVertex intersect(
+    const ShadedVertex& a, const ShadedVertex& b, const Plane& plane) {
+  auto d_a = distance(plane, a.m_position);
+  auto d_b = distance(plane, b.m_position);
+  auto t = d_a / (d_a - d_b);
+  auto result = a;
+  result.m_position = a.m_position + t * (b.m_position - a.m_position);
+  result.m_uv = TextureCoordinate(
+    std::lerp(a.m_uv.m_u, b.m_uv.m_u, t), std::lerp(a.m_uv.m_v, b.m_uv.m_v, t));
   result.m_shading = ShadingTerm(
     lerp(a.m_shading.m_color, b.m_shading.m_color, t),
     std::lerp(a.m_shading.m_intensity, b.m_shading.m_intensity, t));
   return result;
 }
 
-void clip(const Plane& plane, const std::array<ShadedVertex, 9>& in_poly,
-    int in_count, std::array<ShadedVertex, 9>& out_poly, int& out_count) {
-  out_count = 0;
-  for(auto i = 0; i < in_count; ++i) {
-    auto& a = in_poly[i];
-    auto& b = in_poly[(i + 1 == in_count ? 0 : i + 1)];
-    auto da = distance(plane, a.m_position);
-    auto db = distance(plane, b.m_position);
-    auto in_a = da >= 0;
-    auto in_b = db >= 0;
-    if(in_a && in_b) {
-      out_poly[out_count++] = b;
-    } else if (in_a && !in_b) {
-      auto t = da / (da - db);
-      out_poly[out_count++] = lerp(a, b, t);
-    } else if (!in_a && in_b) {
-      auto t = da / (da - db);
-      out_poly[out_count++] = lerp(a, b, t);
-      out_poly[out_count++] = b;
-    }
+std::vector<ShadedVertex> clip(const ShadedVertex& v0, const ShadedVertex& v1,
+    const ShadedVertex& v2, const Plane& plane) {
+  auto d0 = is_in_front(plane, v0.m_position);
+  auto d1 = is_in_front(plane, v1.m_position);
+  auto d2 = is_in_front(plane, v2.m_position);
+  if(d0 && d1 && d2) {
+    return std::vector{v0, v1, v2};
+  } else if(!d0 && !d1 && !d2) {
+    return {};
   }
-}
-
-std::pair<std::array<ShadedVertex, 9>, int> clip(
-    const ShadedVertex& a, const ShadedVertex& b, const ShadedVertex& c,
-    const std::array<Plane,6>& planes) {
-  auto poly0 = std::array<ShadedVertex, 9>();
-  auto poly1 = std::array<ShadedVertex, 9>();
-  poly0[0] = a;
-  poly0[1] = b;
-  poly0[2] = c;
-  auto count0 = 3;
-  auto count1 = 0;
-  for (auto& plane : planes) {
-    clip(plane, poly0, count0, poly1, count1);
-    poly0 = poly1;
-    count0 = count1;
-    if (count0 < 3) {
-      return std::pair(poly0, 0);
-    }
+  auto count = 0;
+  if(d0) {
+    ++count;
   }
-  return std::pair(poly0, count0);
+  if(d1) {
+    ++count;
+  }
+  if(d2) {
+    ++count;
+  }
+  if(count == 1) {
+    auto [a, b, c] = [&] {
+      if(d0) {
+        return std::tuple(&v0, &v1, &v2);
+      } else if(d1) {
+        return std::tuple(&v1, &v2, &v0);
+      }
+      return std::tuple(&v2, &v0, &v1);
+    }();
+    auto clipped_b = intersect(*a, *b, plane);
+    auto clipped_c = intersect(*a, *c, plane);
+    return std::vector{*a, clipped_b, clipped_c};
+  } else {
+    auto [c, a, b] = [&] {
+      if(!d0) {
+        return std::tuple(&v0, &v1, &v2);
+      } else if(!d1) {
+        return std::tuple(&v1, &v2, &v0);
+      }
+      return std::tuple(&v2, &v0, &v1);
+    }();
+    auto clipped_a = intersect(*a, *c, plane);
+    auto clipped_b = intersect(*b, *c, plane);
+    return std::vector{*a, *b, clipped_a, clipped_a, *b, clipped_b};
+  }
 }
 
 Vector transform_normal(const Matrix& transformation, const Vector& normal) {
@@ -194,29 +193,31 @@ void render(const Model& model, const Fragment& fragment,
       calculate_shading(scene.get_ambient_light()) +
         calculate_shading(scene.get_directional_light(),
           transform_normal(transformation, c.m_normal)));
-  float fov = camera.get_field_of_view();
-  float tx  = std::tan(0.5f * fov) * camera.get_aspect_ratio();  // horizontal slope
-  float ty  = std::tan(0.5f * fov);                           
-  std::array<Plane, 6> planes = {
-    Plane(Vector( 0,  0, -1),  Camera::NEAR_PLANE_Z),
-    Plane(Vector( 0,  0,  1), -Camera::FAR_PLANE_Z), 
-    Plane(Vector( 1,  0, -tx),  0.0f),              
-    Plane(Vector(-1,  0, -tx),  0.0f),             
-    Plane(Vector( 0,  1, -ty),  0.0f),           
-    Plane(Vector( 0, -1, -ty),  0.0f)             
-  };
-  auto [poly, count] = clip(shaded_a, shaded_b, shaded_c, planes);
-  if (count < 3) {
-    return;  // completely outside
+  auto f_x = camera.get_horizontal_focal_length();
+  auto f_y = camera.get_focal_length();
+  auto planes = std::array{
+    Plane(Vector(0.f, 0.f, -1.f), Camera::NEAR_PLANE_Z),
+    Plane(normalize(Vector(  f_x, 0.f, -1.f)), 0.f),
+    Plane(normalize(Vector( -f_x, 0.f, -1.f)), 0.f),
+    Plane(normalize(Vector( 0.f,  f_y, -1.f)), 0.f),
+    Plane(normalize(Vector( 0.f, -f_y, -1.f)), 0.f)};
+  auto clipped_vertices = std::vector{shaded_a, shaded_b, shaded_c};
+  for(auto& plane : planes) {
+    auto new_vertices = std::vector<ShadedVertex>();
+    for(auto i = std::size_t(0); i + 2 < clipped_vertices.size(); i += 3) {
+      auto segment = clip(clipped_vertices[i], clipped_vertices[i + 1],
+        clipped_vertices[i + 2], plane);
+      new_vertices.insert(new_vertices.end(), segment.begin(), segment.end());
+    }
+    clipped_vertices = std::move(new_vertices);
+    if(clipped_vertices.empty()) {
+      return;
+    }
   }
-  for (int i = 1; i + 1 < count; ++i) {
-    render(poly[0],
-           poly[i],
-           poly[i + 1],
-           fragment.get_material(),
-           camera,
-           frame_buffer,
-           depth_buffer);
+  for(auto i = std::size_t(0); i + 2 < clipped_vertices.size(); i += 3) {
+    render(clipped_vertices[i], clipped_vertices[i + 1],
+      clipped_vertices[i + 2], fragment.get_material(), camera, frame_buffer,
+      depth_buffer);
   }
 }
 
