@@ -64,7 +64,7 @@ TEST_SUITE("Frustum") {
     auto width  = 800;
     auto height = 600;
     auto camera = Camera(static_cast<float>(width) / height);
-    auto near_distance = -Camera::NEAR_PLANE_Z;
+    auto near_distance = -camera.get_near_plane();
     auto tan_half_fov = std::tan(camera.get_field_of_view() / 2);
     auto near_plane_half_height = tan_half_fov * near_distance;
     auto near_plane_half_width =

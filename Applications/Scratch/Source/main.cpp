@@ -196,7 +196,7 @@ void render(const Model& model, const Fragment& fragment,
   auto f_x = camera.get_horizontal_focal_length();
   auto f_y = camera.get_focal_length();
   auto planes = std::array{
-    Plane(Vector(0.f, 0.f, -1.f), Camera::NEAR_PLANE_Z),
+    Plane(Vector(0.f, 0.f, -1.f), camera.get_near_plane()),
     Plane(normalize(Vector(  f_x, 0.f, -1.f)), 0.f),
     Plane(normalize(Vector( -f_x, 0.f, -1.f)), 0.f),
     Plane(normalize(Vector( 0.f,  f_y, -1.f)), 0.f),
@@ -444,7 +444,7 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
   auto depth_buffer = DepthBuffer(WIDTH, HEIGHT);
   auto scene = make_simple_scene();
   auto camera = Camera(Point(0, 0, -5), Vector(0, 0, 1), Vector(0, 1, 0),
-    WIDTH / float(HEIGHT), std::numbers::pi_v<float> / 2);
+    WIDTH / float(HEIGHT));
 /*
   auto depth = int(level_map.size());
   auto cx = 3;

@@ -14,18 +14,22 @@ namespace Ashkal {
   class Camera {
     public:
 
-      /** The z-position of the near plane. */
-      static inline const auto NEAR_PLANE_Z = -1.f;
-
-      /** The z-position of the far plane. */
-      static inline const auto FAR_PLANE_Z = -100000.f;
+      /**
+       * Constructs a Camera at the origin (0, 0, 0), facing forward (0, 0, 1),
+       * and oriented upwards (0, 1, 0) with a field of view of 90 degrees.
+       * The near plane is set to -1 and the far plane is at 100000.
+       * @param aspect_ratio The screen's aspect ratio.
+       */
+      explicit Camera(float aspect_ratio);
 
       /**
        * Constructs a Camera at the origin (0, 0, 0), facing forward (0, 0, 1),
        * and oriented upwards (0, 1, 0) with a field of view of 90 degrees.
        * @param aspect_ratio The screen's aspect ratio.
+       * @param near_plane The distance to the near plane.
+       * @param far_plane The distance to the far plane.
        */
-      explicit Camera(float aspect_ratio);
+      explicit Camera(float near_plane, float far_plane, float aspect_ratio);
 
       /**
        * Constructs a Camera at a given position, with a given direction and
@@ -36,13 +40,35 @@ namespace Ashkal {
 
       /**
        * Constructs a Camera at a given position, with a given direction and
-       * orientation, aspect ratio and field of view.
+       * orientation, near and far planes, aspect ratio and a 90 degree field of
+       * view.
+       */
+      Camera(Point position, Vector direction, Vector orientation,
+        float near_plane, float far_plane, float aspect_ratio);
+
+      /**
+       * Constructs a Camera at a given position, with a given direction and
+       * orientation, near and far planes, aspect ratio and field of view.
        */
       Camera(Point position, Vector direction, Vector orientation,
         float aspect_ratio, float field_of_view);
 
+      /**
+       * Constructs a Camera at a given position, with a given direction and
+       * orientation, near and far planes, aspect ratio and field of view.
+       */
+      Camera(Point position, Vector direction, Vector orientation,
+        float near_plane, float far_plane, float aspect_ratio,
+        float field_of_view);
+
       /** Returns the aspect's ratio. */
       float get_aspect_ratio() const;
+
+      /** Returns the distance from this camera to the near clipping plane. */
+      float get_near_plane() const;
+
+      /** Returns the distance from this camera to the far clipping plane. */
+      float get_far_plane() const;
 
       /** Returns the field of view (vertical). */
       float get_field_of_view() const;
@@ -85,6 +111,8 @@ namespace Ashkal {
       static const auto Z_INDEX = 2;
       static const auto H_INDEX = 3;
       float m_aspect_ratio;
+      float m_near_plane;
+      float m_far_plane;
       float m_field_of_view;
       float m_focal_length;
       float m_horizontal_focal_length;
@@ -135,8 +163,8 @@ namespace Ashkal {
   }
 
   /** Tests if a point is in front of the camera. */
-  inline bool is_in_front(const Point& point) {
-    return point.m_z <= Camera::NEAR_PLANE_Z;
+  inline bool is_in_front(const Camera& camera, const Point& point) {
+    return point.m_z <= camera.get_near_plane();
   }
 
   /** Transforms a point from the world space to camera space. */
@@ -154,16 +182,32 @@ namespace Ashkal {
   }
 
   inline Camera::Camera(float aspect_ratio)
-    : Camera(Point(0, 0, 0), Vector(0, 0, 1), Vector(0, 1, 0), aspect_ratio) {}
+    : Camera(-1, -100000, aspect_ratio) {}
+
+  inline Camera::Camera(float near_plane, float far_plane, float aspect_ratio)
+    : Camera(Point(0, 0, 0), Vector(0, 0, 1), Vector(0, 1, 0), near_plane,
+        far_plane, aspect_ratio) {}
 
   inline Camera::Camera(
     Point position, Vector direction, Vector orientation, float aspect_ratio)
-    : Camera(position, direction, orientation, aspect_ratio,
-        std::numbers::pi_v<float> / 2) {}
+    : Camera(position, direction, orientation, -1, -100000, aspect_ratio) {}
 
   inline Camera::Camera(Point position, Vector direction, Vector orientation,
-      float aspect_ratio, float field_of_view)
-      : m_aspect_ratio(aspect_ratio),
+    float near_plane, float far_plane, float aspect_ratio)
+    : Camera(position, direction, orientation, near_plane, far_plane,
+        aspect_ratio, std::numbers::pi / 2) {}
+
+  inline Camera::Camera(Point position, Vector direction, Vector orientation,
+    float aspect_ratio, float field_of_view)
+    : Camera(position, direction, orientation, -1, -100000, aspect_ratio,
+        field_of_view) {}
+
+  inline Camera::Camera(Point position, Vector direction, Vector orientation,
+      float near_plane, float far_plane, float aspect_ratio,
+      float field_of_view)
+      : m_near_plane(near_plane),
+        m_far_plane(far_plane),
+        m_aspect_ratio(aspect_ratio),
         m_field_of_view(field_of_view),
         m_focal_length(1 / std::tan(0.5f * m_field_of_view)),
         m_horizontal_focal_length(m_focal_length / m_aspect_ratio) {
@@ -190,6 +234,14 @@ namespace Ashkal {
 
   inline float Camera::get_aspect_ratio() const {
     return m_aspect_ratio;
+  }
+
+  inline float Camera::get_near_plane() const {
+    return m_near_plane;
+  }
+
+  inline float Camera::get_far_plane() const {
+    return m_far_plane;
   }
 
   inline float Camera::get_field_of_view() const {
@@ -244,9 +296,9 @@ namespace Ashkal {
   inline void Frustum::update(const Camera& camera) {
     auto tan_half_field_of_view = std::tan(camera.get_field_of_view() * 0.5f);
     auto near_plane_center =
-      camera.get_position() + -Camera::NEAR_PLANE_Z * camera.get_direction();
+      camera.get_position() + -camera.get_near_plane() * camera.get_direction();
     auto near_plane_half_height =
-      tan_half_field_of_view * -Camera::NEAR_PLANE_Z;
+      tan_half_field_of_view * -camera.get_near_plane();
     auto near_plane_half_width =
       camera.get_aspect_ratio() * near_plane_half_height;
     auto near_plane_top_left = near_plane_center +
@@ -259,8 +311,9 @@ namespace Ashkal {
     auto near_plane_bottom_right =
       near_plane_bottom_left + 2 * near_plane_half_width * camera.get_right();
     auto far_plane_center =
-      camera.get_position() + -Camera::FAR_PLANE_Z * camera.get_direction();
-    auto far_plane_half_height = tan_half_field_of_view * -Camera::FAR_PLANE_Z;
+      camera.get_position() + -camera.get_far_plane() * camera.get_direction();
+    auto far_plane_half_height =
+      tan_half_field_of_view * -camera.get_far_plane();
     auto far_plane_half_width =
       camera.get_aspect_ratio() * far_plane_half_height;
     auto far_plane_top_left = far_plane_center +
