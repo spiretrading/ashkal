@@ -45,6 +45,20 @@ namespace Ashkal {
       /** Returns the chosen clipping plane. */
       const Plane& get_plane(ClippingPlane plane) const;
 
+      /**
+       * Updates the frustum.
+       * @param position The position of the origin.
+       * @param direction The normalized direction of the interior of the frustum.
+       * @param orientation The normalized direction pointing up.
+       * @param near_plane The distance from the origin to the near plane.
+       * @param far_plane The distance to the far plane.
+       * @param aspect_ratio The aspect ratio.
+       * @param field_of_view The vertical field of view in radians.
+       */
+      void update(const Point& position, const Vector& direction,
+        const Vector& orientation, float near_plane, float far_plane,
+        float aspect_ratio, float field_of_view);
+
       /** Updates the frustum from the given Camera. */
       void update(const Camera& camera);
 
@@ -54,6 +68,49 @@ namespace Ashkal {
 
   inline const Plane& Frustum::get_plane(ClippingPlane plane) const {
     return m_planes[static_cast<std::size_t>(plane)];
+  }
+
+  inline void Frustum::update(const Point& position, const Vector& direction,
+      const Vector& orientation, float near_plane, float far_plane,
+      float aspect_ratio, float field_of_view) {
+    auto tan_half_field_of_view = std::tan(0.5f * field_of_view);
+    auto right = cross(orientation, direction);
+    auto near_plane_center = position + -near_plane * direction;
+    auto near_plane_half_height = tan_half_field_of_view * -near_plane;
+    auto near_plane_half_width = aspect_ratio * near_plane_half_height;
+    auto near_plane_top_left = near_plane_center +
+      near_plane_half_height * orientation - near_plane_half_width * right;
+    auto near_plane_top_right =
+      near_plane_top_left + 2 * near_plane_half_width * right;
+    auto near_plane_bottom_left = near_plane_top_left -
+      2 * near_plane_half_height * orientation;
+    auto near_plane_bottom_right =
+      near_plane_bottom_left + 2 * near_plane_half_width * right;
+    auto far_plane_center = position + -far_plane * direction;
+    auto far_plane_half_height = tan_half_field_of_view * -far_plane;
+    auto far_plane_half_width = aspect_ratio * far_plane_half_height;
+    auto far_plane_top_left = far_plane_center +
+      far_plane_half_height * orientation - far_plane_half_width * right;
+    auto far_plane_top_right =
+      far_plane_top_left + 2 * far_plane_half_width * right;
+    auto far_plane_bottom_left =
+      far_plane_top_left - 2 * far_plane_half_height * orientation;
+    auto far_plane_bottom_right =
+      far_plane_bottom_left + 2 * far_plane_half_width * right;
+    m_planes[static_cast<std::size_t>(Frustum::ClippingPlane::LEFT)] =
+      make_plane(position, near_plane_bottom_left, near_plane_top_left);
+    m_planes[static_cast<std::size_t>(Frustum::ClippingPlane::RIGHT)] =
+      make_plane(position, near_plane_top_right, near_plane_bottom_right);
+    m_planes[static_cast<std::size_t>(Frustum::ClippingPlane::BOTTOM)] =
+      make_plane(position, near_plane_bottom_right, near_plane_bottom_left);
+    m_planes[static_cast<std::size_t>(Frustum::ClippingPlane::TOP)] =
+      make_plane(position, near_plane_top_left, near_plane_top_right);
+    m_planes[static_cast<std::size_t>(Frustum::ClippingPlane::NEAR)] =
+      make_plane(
+        near_plane_top_left, near_plane_top_right, near_plane_bottom_right);
+    m_planes[static_cast<std::size_t>(Frustum::ClippingPlane::FAR)] =
+      make_plane(
+        far_plane_top_right, far_plane_top_left, far_plane_bottom_left);
   }
 
   /**

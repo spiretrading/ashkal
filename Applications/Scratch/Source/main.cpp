@@ -10,6 +10,7 @@
 #include "Ashkal/Renderer.hpp"
 #include "Ashkal/Scene.hpp"
 #include "Ashkal/SdlSurfaceColorSampler.hpp"
+#include "Ashkal/ShadedVertex.hpp"
 #include "Ashkal/ShadingSample.hpp"
 #include "Ashkal/SolidColorSampler.hpp"
 #include "Ashkal/TextRenderer.hpp"
@@ -22,12 +23,6 @@ float compute_edge(const ScreenCoordinate& p1,
   return (p2.m_x - p1.m_x) * (p.m_y - p1.m_y) -
     (p2.m_y - p1.m_y) * (p.m_x - p1.m_x);
 }
-
-struct ShadedVertex {
-  Point m_position;
-  TextureCoordinate m_uv;
-  ShadingTerm m_shading;
-};
 
 void render(const ShadedVertex& a, const ShadedVertex& b, const ShadedVertex& c,
     const Material& material, const Camera& camera, FrameBuffer& frame_buffer,
@@ -94,80 +89,27 @@ void render(const ShadedVertex& a, const ShadedVertex& b, const ShadedVertex& c,
   }
 }
 
-ShadedVertex intersect(
-    const ShadedVertex& a, const ShadedVertex& b, const Plane& plane) {
-  auto d_a = distance(plane, a.m_position);
-  auto d_b = distance(plane, b.m_position);
-  auto t = d_a / (d_a - d_b);
-  auto result = a;
-  result.m_position = a.m_position + t * (b.m_position - a.m_position);
-  result.m_uv = TextureCoordinate(
-    std::lerp(a.m_uv.m_u, b.m_uv.m_u, t), std::lerp(a.m_uv.m_v, b.m_uv.m_v, t));
-  result.m_shading = ShadingTerm(
-    lerp(a.m_shading.m_color, b.m_shading.m_color, t),
-    std::lerp(a.m_shading.m_intensity, b.m_shading.m_intensity, t));
-  return result;
-}
-
-std::vector<ShadedVertex> clip(const ShadedVertex& v0, const ShadedVertex& v1,
-    const ShadedVertex& v2, const Plane& plane) {
-  auto d0 = is_in_front(plane, v0.m_position);
-  auto d1 = is_in_front(plane, v1.m_position);
-  auto d2 = is_in_front(plane, v2.m_position);
-  if(d0 && d1 && d2) {
-    return std::vector{v0, v1, v2};
-  } else if(!d0 && !d1 && !d2) {
-    return {};
+void render(const ShadedVertex& v0, const ShadedVertex& v1,
+    const ShadedVertex& v2, const Material& material, const Camera& camera,
+    FrameBuffer& frame_buffer, DepthBuffer& depth_buffer, int plane_index) {
+  if(plane_index == Frustum::PLANE_COUNT) {
+    render(v0, v1, v2, material, camera, frame_buffer, depth_buffer);
+    return;
   }
-  auto count = 0;
-  if(d0) {
-    ++count;
+  auto clipped_a = ShadedVertex();
+  auto clipped_b = ShadedVertex();
+  auto& plane = camera.get_local_frustum().get_plane(
+    static_cast<Frustum::ClippingPlane>(plane_index));
+  auto clipped_vertices = clip(v0, v1, v2, clipped_a, clipped_b, plane);
+  if(!clipped_vertices.front()) {
+    return;
   }
-  if(d1) {
-    ++count;
+  render(*clipped_vertices[0], *clipped_vertices[1], *clipped_vertices[2],
+    material, camera, frame_buffer, depth_buffer, plane_index + 1);
+  if(clipped_vertices.back()) {
+    render(*clipped_vertices[0], *clipped_vertices[2], *clipped_vertices[3],
+      material, camera, frame_buffer, depth_buffer, plane_index + 1);
   }
-  if(d2) {
-    ++count;
-  }
-  if(count == 1) {
-    auto [a, b, c] = [&] {
-      if(d0) {
-        return std::tuple(&v0, &v1, &v2);
-      } else if(d1) {
-        return std::tuple(&v1, &v2, &v0);
-      }
-      return std::tuple(&v2, &v0, &v1);
-    }();
-    auto clipped_b = intersect(*a, *b, plane);
-    auto clipped_c = intersect(*a, *c, plane);
-    return std::vector{*a, clipped_b, clipped_c};
-  } else {
-    auto [c, a, b] = [&] {
-      if(!d0) {
-        return std::tuple(&v0, &v1, &v2);
-      } else if(!d1) {
-        return std::tuple(&v1, &v2, &v0);
-      }
-      return std::tuple(&v2, &v0, &v1);
-    }();
-    auto clipped_a = intersect(*a, *c, plane);
-    auto clipped_b = intersect(*b, *c, plane);
-    return std::vector{*a, *b, clipped_a, clipped_a, *b, clipped_b};
-  }
-}
-
-Vector transform_normal(const Matrix& transformation, const Vector& normal) {
-  auto transformed_normal = Vector();
-  transformed_normal.m_x = transformation.get(0, 0) * normal.m_x +
-    transformation.get(0, 1) * normal.m_y +
-    transformation.get(0, 2) * normal.m_z;
-  transformed_normal.m_y = transformation.get(1, 0) * normal.m_x +
-    transformation.get(1, 1) * normal.m_y +
-    transformation.get(1, 2) * normal.m_z;
-  transformed_normal.m_z = transformation.get(2, 0) * normal.m_x +
-    transformation.get(2, 1) * normal.m_y +
-    transformation.get(2, 2) * normal.m_z;
-  return normalize(transformed_normal);
 }
 
 void render(const Model& model, const Fragment& fragment,
@@ -180,45 +122,21 @@ void render(const Model& model, const Fragment& fragment,
     ShadedVertex(world_to_view(transformation * a.m_position, camera), a.m_uv,
       calculate_shading(scene.get_ambient_light()) +
         calculate_shading(scene.get_directional_light(),
-          transform_normal(transformation, a.m_normal)));
+          normalize(linear_transform(transformation, a.m_normal))));
   auto& b = vertices[triangle.m_b];
   auto shaded_b =
     ShadedVertex(world_to_view(transformation * b.m_position, camera), b.m_uv,
       calculate_shading(scene.get_ambient_light()) +
         calculate_shading(scene.get_directional_light(),
-          transform_normal(transformation, b.m_normal)));
+          normalize(linear_transform(transformation, b.m_normal))));
   auto& c = vertices[triangle.m_c];
   auto shaded_c =
     ShadedVertex(world_to_view(transformation * c.m_position, camera), c.m_uv,
       calculate_shading(scene.get_ambient_light()) +
         calculate_shading(scene.get_directional_light(),
-          transform_normal(transformation, c.m_normal)));
-  auto f_x = camera.get_horizontal_focal_length();
-  auto f_y = camera.get_focal_length();
-  auto planes = std::array{
-    Plane(Vector(0.f, 0.f, -1.f), camera.get_near_plane()),
-    Plane(normalize(Vector(  f_x, 0.f, -1.f)), 0.f),
-    Plane(normalize(Vector( -f_x, 0.f, -1.f)), 0.f),
-    Plane(normalize(Vector( 0.f,  f_y, -1.f)), 0.f),
-    Plane(normalize(Vector( 0.f, -f_y, -1.f)), 0.f)};
-  auto clipped_vertices = std::vector{shaded_a, shaded_b, shaded_c};
-  for(auto& plane : planes) {
-    auto new_vertices = std::vector<ShadedVertex>();
-    for(auto i = std::size_t(0); i + 2 < clipped_vertices.size(); i += 3) {
-      auto segment = clip(clipped_vertices[i], clipped_vertices[i + 1],
-        clipped_vertices[i + 2], plane);
-      new_vertices.insert(new_vertices.end(), segment.begin(), segment.end());
-    }
-    clipped_vertices = std::move(new_vertices);
-    if(clipped_vertices.empty()) {
-      return;
-    }
-  }
-  for(auto i = std::size_t(0); i + 2 < clipped_vertices.size(); i += 3) {
-    render(clipped_vertices[i], clipped_vertices[i + 1],
-      clipped_vertices[i + 2], fragment.get_material(), camera, frame_buffer,
-      depth_buffer);
-  }
+          normalize(linear_transform(transformation, c.m_normal))));
+  render(shaded_a, shaded_b, shaded_c, fragment.get_material(), camera,
+    frame_buffer, depth_buffer, 0);
 }
 
 void render(const Model& model, const Fragment& fragment,
@@ -259,9 +177,9 @@ void render(const Scene& scene, const Camera& camera, FrameBuffer& frame_buffer,
     auto& segment = model.get_segment(model.get_mesh().m_root);
     auto bounding_box = segment.get_bounding_box();
     bounding_box.apply(segment.get_transformation());
-//    if(intersects(camera.get_frustum(), bounding_box)) {
+    if(intersects(camera.get_frustum(), bounding_box)) {
       render(model, scene, camera, frame_buffer, depth_buffer);
-//    }
+    }
   }
 }
 
@@ -442,10 +360,11 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
   auto text_renderer = TextRenderer("C:\\Windows\\Fonts\\arial.ttf", 12);
   auto frame_buffer = FrameBuffer(WIDTH, HEIGHT);
   auto depth_buffer = DepthBuffer(WIDTH, HEIGHT);
+#if 0
   auto scene = make_simple_scene();
   auto camera = Camera(Point(0, 0, -5), Vector(0, 0, 1), Vector(0, 1, 0),
     WIDTH / float(HEIGHT));
-/*
+#endif
   auto depth = int(level_map.size());
   auto cx = 3;
   auto cy = 2;
@@ -454,7 +373,6 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
     Vector(0, 1, 0), WIDTH / static_cast<float>(HEIGHT));
   auto scene = make_scene(level_map);
 //  auto scene = make_object_viewer(std::filesystem::path(pCmdLine).string());
-*/
   auto is_running = true;
   auto event = SDL_Event();
   auto window_id = SDL_GetWindowID(window);

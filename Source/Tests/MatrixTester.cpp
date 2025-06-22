@@ -230,4 +230,29 @@ TEST_SUITE("Matrix") {
       }
     }
   }
+
+  TEST_CASE("linear_transform_identity") {
+    auto vector = Vector(3, 4, 0);
+    auto result = linear_transform(Matrix::IDENTITY(), vector);
+    CHECK(result.m_x == doctest::Approx(3));
+    CHECK(result.m_y == doctest::Approx(4));
+    CHECK(result.m_z == doctest::Approx(0));
+  }
+
+  TEST_CASE("linear_transform_zero") {
+    auto vector = Vector(0, 0, 0);
+    auto result = linear_transform(Matrix::IDENTITY(), vector);
+    CHECK(result.m_x == doctest::Approx(0));
+    CHECK(result.m_y == doctest::Approx(0));
+    CHECK(result.m_z == doctest::Approx(0));
+  }
+
+  TEST_CASE("linear_transform_scale") {
+    auto v = Vector(1, 0, 0);
+    auto scale = scale_x(2);
+    auto result = linear_transform(scale, v);
+    CHECK(result.m_x == doctest::Approx(2));
+    CHECK(result.m_y == doctest::Approx(0));
+    CHECK(result.m_z == doctest::Approx(0));
+  }
 }

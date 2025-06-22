@@ -35,7 +35,8 @@ TEST_SUITE("Frustum") {
   TEST_CASE("intersects_behind_near_plane") {
     auto camera = Camera(1);
     auto& frustum = camera.get_frustum();
-    auto box = BoundingBox(Point(-0.5f, -0.5f, -0.5f), Point(0.5f, 0.5f, 0.5f));
+    auto box =
+      BoundingBox(Point(-0.5f, -0.5f, -0.05f), Point(0.5f, 0.5f, 0.05f));
     CHECK(!intersects(frustum, box));
   }
 
@@ -81,21 +82,21 @@ TEST_SUITE("Frustum") {
       near_plane_half_height * up + near_plane_half_width * right;
     auto near_plane_bottom_left = eye + near_distance * forward -
       near_plane_half_height * up - near_plane_half_width * right;
-    auto sc_tl = project_to_screen(
+    auto screen_top_left = project_to_screen(
       world_to_view(near_plane_top_left, camera), camera, width, height);
-    auto sc_tr = project_to_screen(
+    auto screen_top_right = project_to_screen(
       world_to_view(near_plane_top_right, camera), camera, width, height);
-    auto sc_br = project_to_screen(
+    auto screen_bottom_right = project_to_screen(
       world_to_view(near_plane_bottom_right, camera), camera, width, height);
-    auto sc_bl = project_to_screen(
+    auto sc_bottom_left = project_to_screen(
       world_to_view(near_plane_bottom_left, camera), camera, width, height);
-    CHECK(sc_tl.m_x == 0);
-    CHECK(sc_tl.m_y == 0);
-    CHECK(sc_tr.m_x == width  - 1);
-    CHECK(sc_tr.m_y == 0);
-    CHECK(sc_br.m_x == width  - 1);
-    CHECK(sc_br.m_y == height - 1);
-    CHECK(sc_bl.m_x == 0);
-    CHECK(sc_bl.m_y == height - 1);
+    CHECK(screen_top_left.m_x == 0);
+    CHECK(screen_top_left.m_y == 0);
+    CHECK(screen_top_right.m_x == width  - 1);
+    CHECK(screen_top_right.m_y == 0);
+    CHECK(screen_bottom_right.m_x == width  - 1);
+    CHECK(screen_bottom_right.m_y == height - 1);
+    CHECK(sc_bottom_left.m_x == 0);
+    CHECK(sc_bottom_left.m_y == height - 1);
   }
 }

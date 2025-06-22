@@ -411,6 +411,28 @@ namespace Ashkal {
     return scale;
   }
 
+  /**
+   * Transforms a vector by a matrix, applying only the linear part of the
+   * transformation and ignoring translation.
+   * @param transformation The transformation matrix to apply.
+   * @param vector The vector to transform.
+   * @return The transformed and vector.
+   */
+  inline Vector linear_transform(
+      const Matrix& transformation, const Vector& vector) {
+    auto transformed_vector = Vector();
+    transformed_vector.m_x = transformation.get(0, 0) * vector.m_x +
+      transformation.get(0, 1) * vector.m_y +
+      transformation.get(0, 2) * vector.m_z;
+    transformed_vector.m_y = transformation.get(1, 0) * vector.m_x +
+      transformation.get(1, 1) * vector.m_y +
+      transformation.get(1, 2) * vector.m_z;
+    transformed_vector.m_z = transformation.get(2, 0) * vector.m_x +
+      transformation.get(2, 1) * vector.m_y +
+      transformation.get(2, 2) * vector.m_z;
+    return transformed_vector;
+  }
+
   inline std::ostream& operator <<(std::ostream& out, const Matrix& matrix) {
     out << "Matrix(";
     for(auto y = 0; y != Matrix::HEIGHT; ++y) {

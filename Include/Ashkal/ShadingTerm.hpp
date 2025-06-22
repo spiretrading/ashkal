@@ -23,7 +23,8 @@ namespace Ashkal {
    * @param right The second shading term.
    * @return A new ShadingTerm with summed color and intensity.
    */
-  ShadingTerm operator +(const ShadingTerm& left, const ShadingTerm& right) {
+  inline ShadingTerm operator +(
+      const ShadingTerm& left, const ShadingTerm& right) {
     return ShadingTerm(
       left.m_color + right.m_color, left.m_intensity + right.m_intensity);
   }
