@@ -371,8 +371,8 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
   auto aspect = WIDTH / static_cast<float>(HEIGHT);
   auto camera = Camera(Point(2 * cx, 1, -2 * (depth - cy)), Vector(0, 0, -1),
     Vector(0, 1, 0), WIDTH / static_cast<float>(HEIGHT));
-  auto scene = make_scene(level_map);
-//  auto scene = make_object_viewer(std::filesystem::path(pCmdLine).string());
+//  auto scene = make_scene(level_map);
+  auto scene = make_object_viewer(std::filesystem::path(pCmdLine).string());
   auto is_running = true;
   auto event = SDL_Event();
   auto window_id = SDL_GetWindowID(window);

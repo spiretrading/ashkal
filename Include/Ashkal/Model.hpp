@@ -9,8 +9,6 @@ namespace Ashkal {
 
   /** Encapsulates a mesh and its spatial transformation. */
   class Model {
-    private:
-      struct Node;
     public:
 
       /**
@@ -20,6 +18,10 @@ namespace Ashkal {
        */
       class Segment {
         public:
+          Segment(Segment* parent, const Mesh& mesh, const MeshNode& node,
+            std::unordered_map<const MeshNode*, Segment*>& mesh_to_segment);
+          Segment(const Segment&) = default;
+          Segment& operator =(const Segment&) = default;
 
           /**
            * Returns the local-to-world transformation matrix of this segment.
@@ -39,13 +41,11 @@ namespace Ashkal {
           void apply(const Matrix& transformation);
 
         private:
-          friend struct Model::Node;
+          friend class Model;
+          Segment* m_parent;
+          std::vector<Segment> m_children;
           Matrix m_transformation;
           BoundingBox m_bounding_box;
-
-          Segment();
-          Segment(const Segment&) = default;
-          Segment& operator =(const Segment&) = default;
       };
 
       /**
@@ -73,16 +73,9 @@ namespace Ashkal {
       Segment& get_segment(const MeshNode& node);
 
     private:
-      struct Node {
-        Segment m_segment;
-        std::vector<Node> m_children;
-
-        Node(const Mesh& mesh, const MeshNode& node,
-          std::unordered_map<const MeshNode*, Node*>& mesh_to_node);
-      };
+      std::unordered_map<const MeshNode*, Segment*> m_mesh_to_segment;
       Mesh m_mesh;
-      std::unordered_map<const MeshNode*, Node*> m_mesh_to_node;
-      Node m_root;
+      Segment m_root;
 
       Model(const MeshNode& node);
   };
@@ -146,28 +139,31 @@ namespace Ashkal {
 
   inline Model::Model(Mesh mesh)
     : m_mesh(std::move(mesh)),
-      m_root(m_mesh, m_mesh.m_root, m_mesh_to_node) {}
+      m_root(nullptr, m_mesh, m_mesh.m_root, m_mesh_to_segment) {}
 
   inline const Mesh& Model::get_mesh() const {
     return m_mesh;
   }
 
   inline const Model::Segment& Model::get_segment(const MeshNode& node) const {
-    return m_mesh_to_node.at(&node)->m_segment;
+    return *m_mesh_to_segment.at(&node);
   }
 
   inline Model::Segment& Model::get_segment(const MeshNode& node) {
-    return m_mesh_to_node.at(&node)->m_segment;
+    return *m_mesh_to_segment.at(&node);
   }
 
-  inline Model::Node::Node(const Mesh& mesh, const MeshNode& node,
-      std::unordered_map<const MeshNode*, Node*>& mesh_to_node) {
-    m_segment.m_bounding_box = make_bounding_box(mesh, node);
-    mesh_to_node.insert(std::pair(&node, this));
+  inline Model::Segment::Segment(Segment* parent, const Mesh& mesh,
+      const MeshNode& node,
+      std::unordered_map<const MeshNode*, Segment*>& mesh_to_segment)
+      : m_parent(parent),
+        m_transformation(Matrix::IDENTITY()),
+        m_bounding_box(make_bounding_box(mesh, node)) {
+    mesh_to_segment.insert(std::pair(&node, this));
     if(node.get_type() == MeshNode::Type::CHUNK) {
       m_children.reserve(node.as_chunk().size());
       for(auto& child : node.as_chunk()) {
-        m_children.emplace_back(mesh, child, mesh_to_node);
+        m_children.emplace_back(this, mesh, child, mesh_to_segment);
       }
     }
   }
@@ -182,10 +178,18 @@ namespace Ashkal {
 
   inline void Model::Segment::apply(const Matrix& transformation) {
     m_transformation = transformation * m_transformation;
+    m_bounding_box.apply(transformation);
+    auto parent = m_parent;
+    while(parent) {
+      auto bounding_box = parent->m_children.front().get_bounding_box();
+      for(auto i = std::size_t(1); i != parent->m_children.size(); ++i) {
+        bounding_box =
+          merge(bounding_box, parent->m_children[i].get_bounding_box());
+      }
+      parent->m_bounding_box = bounding_box;
+      parent = m_parent->m_parent;
+    }
   }
-
-  inline Model::Segment::Segment()
-    : m_transformation(Matrix::IDENTITY()) {}
 }
 
 #endif
